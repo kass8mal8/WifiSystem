@@ -38,26 +38,45 @@ function isValidMacAddress(mac: string): boolean {
   return /^[0-9a-fA-F]{12}$/.test(normalized);
 }
 
-/**
- * Posts a JSON command to the router's CGI API.
- */
-async function routerPost(body: object, sessionId: string = ''): Promise<any> {
-  const res = await fetch(CGI, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-    body: JSON.stringify({ sessionId, language: 'EN', ...body }),
-  });
+async function routerPost(body: any, sessionId: string = ''): Promise<any> {
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json; charset=UTF-8',
+    };
 
-  if (!res.ok) {
-    throw new Error(`[RouterSync] HTTP error ${res.status} from router CGI.`);
-  }
+    if (sessionId) {
+        headers['Cookie'] = `sessionID=${sessionId}`;
+    }
 
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`[RouterSync] Failed to parse router response: ${text}`);
-  }
+    const timestamp = Date.now();
+    const url = `${CGI}?_t=${timestamp}`;
+    
+    // Ensure method field is in the body if missing (default to GET-style response for most commands)
+    const finalBody = {
+        ...body,
+        method: body.method || 'GET',
+        sessionId: body.sessionId || sessionId || '',
+        language: body.language || 'EN'
+    };
+
+    const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(finalBody),
+    });
+    const text = await res.text();
+
+    if (!res.ok) {
+        console.error(`[RouterSync] HTTP ${res.status} from ${url}. Body: ${text}`);
+        throw new Error(`[RouterSync] HTTP error ${res.status} from router.`);
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        // Log raw response for diagnostics if it's not JSON
+        console.warn(`[RouterSync] Non-JSON response from ${url}: ${text.substring(0, 500)}`);
+        return { raw: text };
+    }
 }
 
 /**
@@ -68,103 +87,150 @@ export class RouterSync {
   // Cache a known-good login variant to avoid repeated failed attempts.
   private static loginVariantIndex: number | null = null;
 
-  /**
-   * Step 1: Get a fresh session token from the router (cmd: 232).
-   * This token is required to compute the password hash for login.
-   */
-  private static async getSessionToken(): Promise<string> {
-    const data = await routerPost({ cmd: 232, method: 'GET' });
-    const token = data?.token || data?.sessionId || '';
-    if (!token) {
-      throw new Error(`[RouterSync] Could not obtain session token. Response: ${JSON.stringify(data)}`);
-    }
-    console.log(`[RouterSync] Got session token: ${token.substring(0, 16)}...`);
-    return token;
-  }
+
 
   /**
    * Step 2: Log in and return the authenticated session ID.
-   * Per router login.js: passwd = sha256(token + plainPassword)
    */
   private static async login(): Promise<string> {
+    const rawPass = process.env.ROUTER_PASSWORD || '';
+    const user = process.env.ROUTER_USERNAME || 'admin';
+    const pass = normalizeRouterPassword(rawPass);
+
+    console.log(`[RouterSync] Starting login process...`);
+    console.log(`[RouterSync] Credential check: user="${user}", pass="${pass.substring(0, 1)}***" (len: ${pass.length})`);
+    
     const buildLoginVariants = (token: string) => {
-      const candidates = Array.from(
-        new Set([ROUTER_PASSWORD, ROUTER_PASSWORD_RAW].filter(Boolean))
-      );
+      const candidates = Array.from(new Set([pass, rawPass].filter(Boolean)));
+      console.log(`[RouterSync] Found ${candidates.length} password candidates.`);
 
-      const variants: Array<{ requestSessionId: string; body: any }> = [];
+      const variants: Array<{ name: string; requestSessionId: string; body: any }> = [];
       for (const candidate of candidates) {
-        const hashTokenThenPass = crypto.createHash('sha256').update(token + candidate).digest('hex');
-
+        // --- 1. Common SHA256 Patterns ---
+        
+        // Variant: sha256(token + password)
+        const sha_1 = crypto.createHash('sha256').update(token + candidate).digest('hex');
         variants.push({
-          // Mirrors login.js: sessionId=random, passwd=sha256(token + passwd)
-          requestSessionId: generateSessionId(),
-          body: {
-            cmd: 100,
-            method: 'POST',
-            username: ROUTER_USERNAME,
-            passwd: hashTokenThenPass,
-            isAutoUpgrade: '0',
-            subcmd: 0,
-          },
+          name: `sha256(token + pass)`,
+          requestSessionId: token || generateSessionId(),
+          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: sha_1, isAutoUpgrade: '0', subcmd: 0 },
+        });
+
+        // Variant: sha256(username + sha256(password) + token)
+        const shaPre = crypto.createHash('sha256').update(candidate).digest('hex');
+        const sha_4 = crypto.createHash('sha256').update(ROUTER_USERNAME + shaPre + token).digest('hex');
+        variants.push({
+          name: `sha256(user + sha256(pass) + token)`,
+          requestSessionId: token || generateSessionId(),
+          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: sha_4, isAutoUpgrade: '0', subcmd: 0 },
+        });
+
+        // --- 2. Common MD5 Patterns ---
+        
+        // Variant: md5(token + password)
+        const md5_1 = crypto.createHash('md5').update(token + candidate).digest('hex');
+        variants.push({
+          name: `md5(token + pass)`,
+          requestSessionId: token || generateSessionId(),
+          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: md5_1, isAutoUpgrade: '0', subcmd: 0 },
+        });
+
+        // Variant: md5(password + token)
+        const md5_2 = crypto.createHash('md5').update(candidate + token).digest('hex');
+        variants.push({
+          name: `md5(pass + token)`,
+          requestSessionId: token || generateSessionId(),
+          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: md5_2, isAutoUpgrade: '0', subcmd: 0 },
+        });
+
+        // Variant: md5(username + password + token) - common for ZLT X17M
+        const md5_3 = crypto.createHash('md5').update(ROUTER_USERNAME + candidate + token).digest('hex');
+        variants.push({
+          name: `md5(user + pass + token)`,
+          requestSessionId: token || generateSessionId(),
+          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: md5_3, isAutoUpgrade: '0', subcmd: 0 },
         });
       }
 
       return variants;
     };
 
-    const isLocked = (data: any): boolean => data?.login_fail === 'fail' && Number(data?.login_time || '0') > 0;
-    const isSuccess = (data: any): boolean =>
-      !!data?.sessionId && data?.success !== false && data?.login_fail !== 'fail';
-
-    const tryVariant = async (variantIndex: number): Promise<string | null> => {
-      const token = await this.getSessionToken();
-      const variants = buildLoginVariants(token);
-      const variant = variants[variantIndex];
-      const data = await routerPost(variant.body, variant.requestSessionId);
-      console.log(`[RouterSync] Login response (variant ${variantIndex + 1}): ${JSON.stringify(data)}`);
-
-      if (isSuccess(data)) {
-        this.loginVariantIndex = variantIndex;
-        console.log(`[RouterSync] Login successful using variant ${variantIndex + 1}.`);
-        return data.sessionId;
+    const isLocked = (data: any): boolean => 
+      (data?.login_fail === 'fail' && Number(data?.login_time || '0') > 0) || 
+      (data?.error_code === 103) ||
+      (data?.login_fail === 'lock_account');
+    
+    const getSessionToken = async () => {
+      // Try GET_NEXT_LOGIN_TIME (233) first as seen in login.js, fallback to GET_SESSION_TOKEN (232)
+      for (const cmd of [233, 232]) {
+        try {
+          const data = await routerPost({ cmd, method: 'GET' });
+          if (data && data.token) {
+            console.log(`[RouterSync] Got session token using cmd ${cmd}: ${data.token.substring(0, 8)}...`);
+            return data.token;
+          }
+        } catch (e) {
+          console.log(`[RouterSync] Cmd ${cmd} failed or returned no token.`);
+        }
       }
+      throw new Error('Failed to get session token from router.');
+    };
 
+    const generateRouterSessionId = () => {
+        const r1 = Math.random().toString();
+        const r2 = Math.random().toString();
+        return crypto.createHash('md5').update(r1).digest('hex') + 
+               crypto.createHash('md5').update(r2).digest('hex');
+    };
+
+    const tryVariant = async (variant: { name: string; body: any }) => {
+      console.log(`[RouterSync] Attempting variant: ${variant.name}...`);
+      // Start a fresh session for each login attempt as seen in login.js
+      const loginSessionId = generateRouterSessionId();
+      const bodyWithSession = { ...variant.body, sessionId: loginSessionId };
+      
+      const data = await routerPost(bodyWithSession, loginSessionId);
+      console.log(`[RouterSync] Response: ${JSON.stringify(data)}`);
+      
+      if (data && (data.success === true || data.success === 'true')) {
+        // Double check login_fail status which is a ZLT quirk
+        if (data.login_fail === 'fail' || data.login_fail2 === 'fail') {
+          console.log(`[RouterSync] Login command accepted but credentials REJECTED.`);
+          return null;
+        }
+        return data.sessionId || loginSessionId; // Return the authenticated session
+      }
+      
       if (isLocked(data)) {
-        const lockTime = data?.login_time ? ` Router locked for ${data.login_time}s.` : '';
-        throw new Error(`Router login failed due to invalid credentials.${lockTime}`);
+        throw new Error(`Router login locked. Response: ${JSON.stringify(data)}`);
       }
 
       return null;
     };
 
-    // If we already discovered a working variant, try it first and only.
-    if (this.loginVariantIndex !== null) {
-      const sessionId = await tryVariant(this.loginVariantIndex);
-      if (sessionId) return sessionId;
-      // Firmware behavior may have changed; clear cache and continue fallback.
-      this.loginVariantIndex = null;
+    const bootstrapToken = await getSessionToken();
+    const variants = buildLoginVariants(bootstrapToken);
+    
+    for (const variant of variants) {
+      const authenticatedSessionId = await tryVariant(variant);
+      if (authenticatedSessionId) {
+        console.log(`[RouterSync] Login successful! Session: ${authenticatedSessionId.substring(0, 8)}...`);
+        return authenticatedSessionId;
+      }
     }
 
-    // Try minimal safe variants only. Stop immediately on lockout.
-    const bootstrapToken = await this.getSessionToken();
-    const variantCount = buildLoginVariants(bootstrapToken).length;
-    for (let i = 0; i < variantCount; i++) {
-      const sessionId = await tryVariant(i);
-      if (sessionId) return sessionId;
-    }
-
-    throw new Error('Router login failed for all supported Airtel/ZLT login variants. Verify router username/password.');
+    throw new Error('Router login failed for all supported variants. Please verify your ROUTER_PASSWORD in .env');
   }
 
   /**
    * Step 3: Read all current MAC filtering rules from the router (cmd: 23 GET).
    */
   private static async getMacRules(sessionId: string): Promise<MacRule[]> {
-    const data = await routerPost({ cmd: 23, method: 'GET', getfun: true }, sessionId);
-    const rules: MacRule[] = data?.datas || [];
-    console.log(`[RouterSync] Fetched ${rules.length} MAC rules from router.`);
-    return rules;
+    const stationsData = await routerPost({ cmd: 120, sessionId });
+    const filtersData = await routerPost({ cmd: 121, sessionId });
+    const currentRules: MacRule[] = filtersData?.datas || [];
+    console.log(`[RouterSync] Fetched ${currentRules.length} MAC rules from router.`);
+    return currentRules;
   }
 
   /**

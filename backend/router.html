@@ -1,0 +1,225 @@
+<!--
+ * @,@Author: ,: your name
+ * @,@Date: ,: 2020-12-15 13:56:49
+ * @,@LastEditTime: ,: 2021-08-12 18:32:42
+ * @,@LastEditors: ,: Please set LastEditors
+ * @,@Description: ,: In User Settings Edit
+ * @,@FilePath: ,: \war\index.html
+ -->
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Cache-Control" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Router</title>
+    <script>
+      if (navigator.userAgent.indexOf('Trident') > -1) {
+        alert(
+          'IE 内核浏览器可能会导致页面显示不正常，请使用除 IE 浏览器以外的浏览器或者不要使用兼容模式'
+        );
+      }
+    </script>
+    <script>
+      var showErrorAlert = true;
+      // 添加全局错误监听器
+      window.addEventListener(
+        'error',
+        (event) => {
+          if (!showErrorAlert) return;
+          const target = event.target || event.srcElement;
+          const isResourceError =
+            target instanceof HTMLScriptElement ||
+            target instanceof HTMLLinkElement ||
+            target instanceof HTMLImageElement ||
+            target instanceof HTMLFontElement;
+          if (isResourceError) {
+            const src = target.src || target.href;
+            if (
+              src &&
+              ((src.indexOf('css/') != -1) ||
+                (src.indexOf('js/') != -1 && src.indexOf('.js') != -1) ||
+                (src.indexOf('html/') != -1 && src.indexOf('.html') != -1))
+            ) {
+              alert(
+                'WebUI resource loading failed. Please check your network connection and refresh the page to try again.'
+              );
+              showErrorAlert = false;
+              location.reload();
+            }
+          }
+        },
+        true
+      );
+
+      // 添加字体加载错误监听
+      if (document.fonts) {
+        document.fonts.addEventListener('loadingdone', (event) => {
+          if (!showErrorAlert) return;
+          const failedFonts = Array.from(event.target).filter(font => font.status === 'error');
+          if (failedFonts.length > 0) {
+            console.log('Font loading failed:', failedFonts);
+            alert(
+              'WebUI font resource loading failed. Please check your network connection and refresh the page to try again.'
+            );
+            location.reload();
+          }
+        });
+      }
+    </script>
+    <link rel="stylesheet" href="css/element.css?t=14a5260e-7c47-43d9-853d-4c994fb84c5d" />
+    <link rel="stylesheet" href="css/home.css" />
+    <link rel="stylesheet" href="css/common.css" />
+    <script type="text/javascript" src="js/json2.js"></script>
+    <script type="text/javascript" src="js/vue.js"></script>
+    <script type="text/javascript" src="js/md5.js"></script>
+    <script type="text/javascript" src="js/jquery-3.7.1min.js"></script>
+    <script type="text/javascript" src="js/jquery.form.js"></script>
+    <script type="text/javascript" src="js/jquery.validate.js"></script>
+    <script type="text/javascript" src="js/jquery.accordion.js"></script>
+    <script type="text/javascript" src="js/jquery.qrcode.min.js"></script>
+    <script type="text/javascript" src="js/underscore-min.js"></script>
+    <script type="text/javascript" src="js/language_list.js?t=14a5260e-7c47-43d9-853d-4c994fb84c5d"></script>
+    <script type="text/javascript" src="js/language.js?t=14a5260e-7c47-43d9-853d-4c994fb84c5d"></script>
+    <script type="text/javascript" src="js/language/cn.js?t=14a5260e-7c47-43d9-853d-4c994fb84c5d"></script>
+    <script type="text/javascript" src="js/helper.js?t=14a5260e-7c47-43d9-853d-4c994fb84c5d"></script>
+    <script type="text/javascript" src="js/base64.min.js?t=14a5260e-7c47-43d9-853d-4c994fb84c5d"></script>
+    <script type="text/javascript" src="js/fy-alert.js?t=14a5260e-7c47-43d9-853d-4c994fb84c5d"></script>
+    <script type="text/javascript" src="js/main.js?t=14a5260e-7c47-43d9-853d-4c994fb84c5d"></script>
+    <script type="text/javascript" src="js/index.js?t=14a5260e-7c47-43d9-853d-4c994fb84c5d"></script>
+    <script type="text/javascript" src="js/element.js?t=14a5260e-7c47-43d9-853d-4c994fb84c5d"></script>
+    <style>
+      .first-change-pwd {
+        width: 500px;
+        margin: 0 auto;
+        margin-top: 50px;
+
+        .el-form-item_content_button {
+          text-align: center;
+        }
+
+        .el-input {
+          width: 100%;
+        }
+
+        .el-input__icon {
+          cursor: pointer;
+        }
+
+        .clearfix {
+          font-size: 16px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <a id="top" style="display: none">TOP</a>
+    <div id="container" style="display: none">
+      <div id="sim_error"></div>
+      <div id="step" v-if="!showChangePwd"></div>
+      <el-card class="first-change-pwd" v-if="showChangePwd" shadow="always">
+        <div slot="header" class="clearfix">
+          <span>{{TAB.sys.changePasswd}}</span>
+        </div>
+        <el-alert
+          :title="passwordTips"
+          type="warning"
+          :closable="false"
+          show-icon
+        ></el-alert>
+        <el-form
+          label-position="top"
+          :model="ruleForm"
+          :rules="rules"
+          ref="ruleForm"
+          :validate-on-rule-change="false"
+        >
+          <el-form-item :label="DOC.sys.oldPasswd" prop="oldPasswd">
+            <td>
+              <el-input
+                v-model.trim="ruleForm.oldPasswd"
+                autocomplete="off"
+                maxlength="65"
+                :type="!showPwd_1?'password':''"
+                oncopy="return false"
+                data-id="index-oldPasswd"
+              >
+              </el-input>
+              <span
+                :class="showPwd_1 ? 'el-icon-view' : 'icon-display-close'"
+                class="icon-eyes"
+                @click="showPwd_1=!showPwd_1"
+              >
+              </span>
+            </td>
+          </el-form-item>
+          <el-form-item :label="DOC.sys.newPasswd" prop="pass">
+            <td>
+              <el-input
+                v-model.trim="ruleForm.pass"
+                autocomplete="off"
+                maxlength="65"
+                :type="!showPwd_2?'password':''"
+                oncopy="return false"
+                data-id="index-pass"
+              >
+              </el-input>
+              <span
+                :class="showPwd_2 ? 'el-icon-view' : 'icon-display-close'"
+                class="icon-eyes"
+                @click="showPwd_2=!showPwd_2"
+              >
+              </span>
+            </td>
+          </el-form-item>
+          <el-form-item :label="DOC.sys.duplicateNewPasswd" prop="checkPass">
+            <td>
+              <el-input
+                v-model.trim="ruleForm.checkPass"
+                autocomplete="off"
+                maxlength="65"
+                :type="!showPwd_3?'password':''"
+                oncopy="return false"
+                data-id="index-checkPass"
+              >
+              </el-input>
+              <span
+                :class="showPwd_3 ? 'el-icon-view' : 'icon-display-close'"
+                class="icon-eyes"
+                @click="showPwd_3=!showPwd_3"
+              >
+              </span>
+            </td>
+          </el-form-item>
+          <el-form-item class="el-form-item_content_button">
+            <el-button @click="backToLogin" data-id="index-btn-updatePinCancel">
+              {{DOC.btn.updatePinCancel}}
+            </el-button>
+            <el-button
+              @click="skip"
+              v-if="Page.aeraId!='UK0603'"
+              data-id="index-btn-skip"
+            >
+              {{DOC.lbl.skip}}
+            </el-button>
+            <el-button
+              type="primary"
+              @click="submitForm(ruleForm.oldPasswd, ruleForm.checkPass)"
+              data-id="index-btn-savePinOk"
+            >
+              {{DOC.btn.savePinOk}}
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </el-card>
+    </div>
+  </body>
+</html>
+
