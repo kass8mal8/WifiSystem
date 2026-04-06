@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { fetchUsers, deleteUser, updateUser } from './api';
 import type { WifiUser } from './api';
 import { Toaster, toast } from 'react-hot-toast';
@@ -9,13 +9,32 @@ import DashboardPage from './pages/DashboardPage';
 import AddUserPage from './pages/AddUserPage';
 import ReportsPage from './pages/ReportsPage';
 import UsersPage from './pages/UsersPage';
+import LoginPage from './pages/LoginPage';
 import ConfirmModal from './components/ConfirmModal';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-function App() {
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, loading } = useAuth();
+  
+  if (loading) return (
+    <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center">
+      <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+    </div>
+  );
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
+function AppContent() {
   const [users, setUsers] = useState<WifiUser[]>([]);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { isAuthenticated } = useAuth();
 
   const loadUsers = async () => {
     try {
@@ -29,8 +48,10 @@ function App() {
   };
 
   useEffect(() => {
-    loadUsers();
-  }, []);
+    if (isAuthenticated) {
+      loadUsers();
+    }
+  }, [isAuthenticated]);
 
   const handleUserAdded = (newUser: WifiUser) => {
     setUsers([newUser, ...users]);
@@ -63,11 +84,12 @@ function App() {
       toast.error('Failed to delete user');
     } finally {
       setUserToDelete(null);
+      setIsConfirmOpen(false);
     }
   };
 
   return (
-    <BrowserRouter>
+    <>
       <Toaster 
         position="top-right"
         toastOptions={{
@@ -86,12 +108,14 @@ function App() {
       
       <div className="relative z-10">
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<DashboardPage users={users} loading={loading} />} />
             <Route path="users" element={<UsersPage users={users} loading={loading} onDelete={handleDeleteClick} onUpdate={handleUserUpdate} onUserAdded={handleUserAdded} />} />
             <Route path="reports" element={<ReportsPage users={users} loading={loading} />} />
             <Route path="add-user" element={<AddUserPage onUserAdded={handleUserAdded} />} />
           </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
 
@@ -104,6 +128,16 @@ function App() {
         confirmText="Confirm"
         type="danger"
       />
+    </>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

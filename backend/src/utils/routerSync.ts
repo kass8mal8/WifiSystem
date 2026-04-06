@@ -17,7 +17,6 @@ const CGI = `${ROUTER_URL}/cgi-bin/http.cgi`;
 
 function normalizeRouterPassword(input: string): string {
   // Decode only valid %HH bytes so strings like "%m%22" become "%m\"".
-  // This avoids decodeURIComponent failures on non-encoded '%' characters.
   return input.replace(/%([0-9a-fA-F]{2})/g, (_match, hex: string) =>
     String.fromCharCode(parseInt(hex, 16))
   );
@@ -50,7 +49,6 @@ async function routerPost(body: any, sessionId: string = ''): Promise<any> {
     const timestamp = Date.now();
     const url = `${CGI}?_t=${timestamp}`;
     
-    // Ensure method field is in the body if missing (default to GET-style response for most commands)
     const finalBody = {
         ...body,
         method: body.method || 'GET',
@@ -73,7 +71,6 @@ async function routerPost(body: any, sessionId: string = ''): Promise<any> {
     try {
         return JSON.parse(text);
     } catch {
-        // Log raw response for diagnostics if it's not JSON
         console.warn(`[RouterSync] Non-JSON response from ${url}: ${text.substring(0, 500)}`);
         return { raw: text };
     }
@@ -81,13 +78,44 @@ async function routerPost(body: any, sessionId: string = ''): Promise<any> {
 
 /**
  * Utility to synchronize user status with the Airtel 5G Router's MAC filtering rules.
- * Uses the router's REST API directly — no browser automation required.
  */
 export class RouterSync {
-  // Cache a known-good login variant to avoid repeated failed attempts.
+  private static cachedSessionId: string | null = null;
   private static loginVariantIndex: number | null = null;
+  private static lastLoginAttemptTime: number = 0;
+  private static loginPromise: Promise<string> | null = null;
 
+  /**
+   * Main entry point to get an authenticated session, handles caching.
+   */
+  private static async ensureLoggedIn(): Promise<string> {
+    if (this.cachedSessionId) {
+      return this.cachedSessionId;
+    }
 
+    if (this.loginPromise) {
+      return this.loginPromise;
+    }
+
+    this.loginPromise = (async () => {
+      try {
+        const now = Date.now();
+        if (now - this.lastLoginAttemptTime < 5000) {
+          console.warn(`[RouterSync] Login requested too soon. Waiting...`);
+          await new Promise(r => setTimeout(r, 2000));
+        }
+
+        this.lastLoginAttemptTime = Date.now();
+        const sid = await this.login();
+        this.cachedSessionId = sid;
+        return sid;
+      } finally {
+        this.loginPromise = null;
+      }
+    })();
+
+    return this.loginPromise;
+  }
 
   /**
    * Step 2: Log in and return the authenticated session ID.
@@ -97,229 +125,264 @@ export class RouterSync {
     const user = process.env.ROUTER_USERNAME || 'admin';
     const pass = normalizeRouterPassword(rawPass);
 
-    console.log(`[RouterSync] Starting login process...`);
-    console.log(`[RouterSync] Credential check: user="${user}", pass="${pass.substring(0, 1)}***" (len: ${pass.length})`);
+    console.log(`[RouterSync] Starting login discovery...`);
     
-    const buildLoginVariants = (token: string) => {
-      const candidates = Array.from(new Set([pass, rawPass].filter(Boolean)));
-      console.log(`[RouterSync] Found ${candidates.length} password candidates.`);
-
-      const variants: Array<{ name: string; requestSessionId: string; body: any }> = [];
-      for (const candidate of candidates) {
-        // --- 1. Common SHA256 Patterns ---
-        
-        // Variant: sha256(token + password)
-        const sha_1 = crypto.createHash('sha256').update(token + candidate).digest('hex');
-        variants.push({
-          name: `sha256(token + pass)`,
-          requestSessionId: token || generateSessionId(),
-          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: sha_1, isAutoUpgrade: '0', subcmd: 0 },
-        });
-
-        // Variant: sha256(username + sha256(password) + token)
-        const shaPre = crypto.createHash('sha256').update(candidate).digest('hex');
-        const sha_4 = crypto.createHash('sha256').update(ROUTER_USERNAME + shaPre + token).digest('hex');
-        variants.push({
-          name: `sha256(user + sha256(pass) + token)`,
-          requestSessionId: token || generateSessionId(),
-          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: sha_4, isAutoUpgrade: '0', subcmd: 0 },
-        });
-
-        // --- 2. Common MD5 Patterns ---
-        
-        // Variant: md5(token + password)
-        const md5_1 = crypto.createHash('md5').update(token + candidate).digest('hex');
-        variants.push({
-          name: `md5(token + pass)`,
-          requestSessionId: token || generateSessionId(),
-          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: md5_1, isAutoUpgrade: '0', subcmd: 0 },
-        });
-
-        // Variant: md5(password + token)
-        const md5_2 = crypto.createHash('md5').update(candidate + token).digest('hex');
-        variants.push({
-          name: `md5(pass + token)`,
-          requestSessionId: token || generateSessionId(),
-          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: md5_2, isAutoUpgrade: '0', subcmd: 0 },
-        });
-
-        // Variant: md5(username + password + token) - common for ZLT X17M
-        const md5_3 = crypto.createHash('md5').update(ROUTER_USERNAME + candidate + token).digest('hex');
-        variants.push({
-          name: `md5(user + pass + token)`,
-          requestSessionId: token || generateSessionId(),
-          body: { cmd: 100, method: 'POST', username: ROUTER_USERNAME, passwd: md5_3, isAutoUpgrade: '0', subcmd: 0 },
-        });
-      }
-
-      return variants;
-    };
-
-    const isLocked = (data: any): boolean => 
-      (data?.login_fail === 'fail' && Number(data?.login_time || '0') > 0) || 
-      (data?.error_code === 103) ||
-      (data?.login_fail === 'lock_account');
+    const bootstrapToken = await this.getSessionToken();
+    const variants = this.buildLoginVariants(bootstrapToken, user, pass, rawPass);
     
-    const getSessionToken = async () => {
-      // Try GET_NEXT_LOGIN_TIME (233) first as seen in login.js, fallback to GET_SESSION_TOKEN (232)
-      for (const cmd of [233, 232]) {
-        try {
-          const data = await routerPost({ cmd, method: 'GET' });
-          if (data && data.token) {
-            console.log(`[RouterSync] Got session token using cmd ${cmd}: ${data.token.substring(0, 8)}...`);
-            return data.token;
-          }
-        } catch (e) {
-          console.log(`[RouterSync] Cmd ${cmd} failed or returned no token.`);
-        }
-      }
-      throw new Error('Failed to get session token from router.');
-    };
+    // Prioritize working variant
+    const sortedIndices = Array.from(variants.keys());
+    if (this.loginVariantIndex !== null && this.loginVariantIndex < variants.length) {
+      sortedIndices.splice(sortedIndices.indexOf(this.loginVariantIndex), 1);
+      sortedIndices.unshift(this.loginVariantIndex);
+    }
 
-    const generateRouterSessionId = () => {
-        const r1 = Math.random().toString();
-        const r2 = Math.random().toString();
-        return crypto.createHash('md5').update(r1).digest('hex') + 
-               crypto.createHash('md5').update(r2).digest('hex');
-    };
-
-    const tryVariant = async (variant: { name: string; body: any }) => {
-      console.log(`[RouterSync] Attempting variant: ${variant.name}...`);
-      // Start a fresh session for each login attempt as seen in login.js
-      const loginSessionId = generateRouterSessionId();
-      const bodyWithSession = { ...variant.body, sessionId: loginSessionId };
+    for (const idx of sortedIndices) {
+      const variant = variants[idx];
+      const sessionId = await this.tryVariant(variant);
       
+      if (sessionId) {
+        console.log(`[RouterSync] Successfully logged in using "${variant.name}"`);
+        this.loginVariantIndex = idx;
+        return sessionId;
+      }
+    }
+
+    throw new Error('Router login failed for all variants. Check credentials in .env');
+  }
+
+  private static buildLoginVariants(token: string, user: string, pass: string, rawPass: string) {
+    const candidates = Array.from(new Set([pass, rawPass].filter(Boolean)));
+    const variants: Array<{ name: string; body: any }> = [];
+
+    for (const candidate of candidates) {
+      // SHA256 Variants
+      const sha1 = crypto.createHash('sha256').update(token + candidate).digest('hex');
+      variants.push({
+        name: `sha256(token + pass)`,
+        body: { cmd: 100, method: 'POST', username: user, passwd: sha1, isAutoUpgrade: '0', subcmd: 0 },
+      });
+
+      const shaPre = crypto.createHash('sha256').update(candidate).digest('hex');
+      const sha4 = crypto.createHash('sha256').update(user + shaPre + token).digest('hex');
+      variants.push({
+        name: `sha256(user + sha256(pass) + token)`,
+        body: { cmd: 100, method: 'POST', username: user, passwd: sha4, isAutoUpgrade: '0', subcmd: 0 },
+      });
+
+      // MD5 Variants
+      const md5_3 = crypto.createHash('md5').update(user + candidate + token).digest('hex');
+      variants.push({
+        name: `md5(user + pass + token)`,
+        body: { cmd: 100, method: 'POST', username: user, passwd: md5_3, isAutoUpgrade: '0', subcmd: 0 },
+      });
+      
+      const md5_1 = crypto.createHash('md5').update(token + candidate).digest('hex');
+      variants.push({
+        name: `md5(token + pass)`,
+        body: { cmd: 100, method: 'POST', username: user, passwd: md5_1, isAutoUpgrade: '0', subcmd: 0 },
+      });
+    }
+    return variants;
+  }
+
+  private static async tryVariant(variant: { name: string; body: any }) {
+    console.log(`[RouterSync] Trying variant: ${variant.name}`);
+    const loginSessionId = generateSessionId();
+    const bodyWithSession = { ...variant.body, sessionId: loginSessionId };
+    
+    try {
       const data = await routerPost(bodyWithSession, loginSessionId);
-      console.log(`[RouterSync] Response: ${JSON.stringify(data)}`);
-      
       if (data && (data.success === true || data.success === 'true')) {
-        // Double check login_fail status which is a ZLT quirk
         if (data.login_fail === 'fail' || data.login_fail2 === 'fail') {
-          console.log(`[RouterSync] Login command accepted but credentials REJECTED.`);
           return null;
         }
-        return data.sessionId || loginSessionId; // Return the authenticated session
+        return data.sessionId || loginSessionId;
       }
-      
-      if (isLocked(data)) {
-        throw new Error(`Router login locked. Response: ${JSON.stringify(data)}`);
-      }
-
-      return null;
-    };
-
-    const bootstrapToken = await getSessionToken();
-    const variants = buildLoginVariants(bootstrapToken);
-    
-    for (const variant of variants) {
-      const authenticatedSessionId = await tryVariant(variant);
-      if (authenticatedSessionId) {
-        console.log(`[RouterSync] Login successful! Session: ${authenticatedSessionId.substring(0, 8)}...`);
-        return authenticatedSessionId;
-      }
+    } catch (e) {
+      console.error(`[RouterSync] Variant attempt error:`, e);
     }
-
-    throw new Error('Router login failed for all supported variants. Please verify your ROUTER_PASSWORD in .env');
+    return null;
   }
 
-  /**
-   * Step 3: Read all current MAC filtering rules from the router (cmd: 23 GET).
-   */
+  private static async getSessionToken(): Promise<string> {
+    for (const cmd of [233, 232]) {
+      try {
+        const data = await routerPost({ cmd, method: 'GET' });
+        if (data && data.token) return data.token;
+      } catch (e) {}
+    }
+    throw new Error('No session token from router');
+  }
+
   private static async getMacRules(sessionId: string): Promise<MacRule[]> {
-    const stationsData = await routerPost({ cmd: 120, sessionId });
-    const filtersData = await routerPost({ cmd: 121, sessionId });
-    const currentRules: MacRule[] = filtersData?.datas || [];
-    console.log(`[RouterSync] Fetched ${currentRules.length} MAC rules from router.`);
-    return currentRules;
+    const filtersData = await routerPost({ cmd: 23 }, sessionId);
+    return filtersData?.datas || [];
   }
 
-  /**
-   * Step 4: Write the updated MAC rules back to the router and apply them.
-   * cmd:23 POST saves the full ruleset, cmd:20 POST applies/commits it.
-   */
   private static async saveMacRules(sessionId: string, rules: MacRule[]): Promise<void> {
-    const saveData = await routerPost({
-      cmd: 23,
-      method: 'POST',
-      success: true,
-      datas: rules,
-    }, sessionId);
-    console.log(`[RouterSync] Save response: ${JSON.stringify(saveData)}`);
-
-    // Equivalent to clicking "Save And Apply Rules" in the UI
-    const applyData = await routerPost({ cmd: 20, method: 'POST' }, sessionId);
-    console.log(`[RouterSync] Apply response: ${JSON.stringify(applyData)}`);
+    await routerPost({ cmd: 23, method: 'POST', datas: rules }, sessionId);
+    await routerPost({ cmd: 20 }, sessionId);
   }
 
-  /**
-   * Enables or disables internet access for a device by MAC address.
-   *
-   * - If the MAC is already in the router's rule list → toggles enableRule.
-   * - If the MAC is NOT found and enable=true → adds a new rule (e.g. on renewal or new user).
-   * - If the MAC is NOT found and enable=false → logs a warning and skips (nothing to block).
-   */
   static async toggleMacRule(macAddress: string, userName: string, enable: boolean): Promise<void> {
-    console.log(`[RouterSync] ${enable ? 'ENABLING' : 'DISABLING'} access for "${userName}" (${macAddress})`);
-
     if (!isValidMacAddress(macAddress)) {
-      throw new Error(`[RouterSync] Invalid MAC address format: "${macAddress}". Expected 12 hex characters.`);
+      throw new Error(`Invalid MAC address: ${macAddress}`);
     }
 
-    const sessionId = await this.login();
-    const rules = await this.getMacRules(sessionId);
+    const sessionId = await this.ensureLoggedIn();
+    let rules = await this.getMacRules(sessionId);
 
-    // Normalize MAC for comparison (strip colons, dashes, spaces; lowercase)
     const normalizedTarget = macAddress.replace(/[:\-\s]/g, '').toLowerCase();
     const ruleIndex = rules.findIndex(
       r => r.mac.replace(/[:\-\s]/g, '').toLowerCase() === normalizedTarget
     );
 
     if (ruleIndex === -1) {
-      if (!enable) {
-        // MAC not on the list and we want to block — nothing to do
-        console.warn(`[RouterSync] MAC ${macAddress} not found in router rules. Nothing to disable.`);
-        return;
-      }
-
-      // MAC not on the list but we want to enable — add a new rule
-      console.log(`[RouterSync] MAC ${macAddress} not found. Adding new rule for "${userName}".`);
-      const newRule: MacRule = {
-        remark: userName,
-        mac: macAddress,
-        enableRule: true,
-        enableLink: true,
-      };
-      rules.push(newRule);
-      await this.saveMacRules(sessionId, rules);
-      console.log(`[RouterSync] New MAC rule added for ${macAddress}.`);
-      return;
+      if (!enable) return;
+      rules.push({ remark: userName, mac: macAddress, enableRule: true, enableLink: true });
+    } else {
+      if (rules[ruleIndex].enableRule === enable) return;
+      rules[ruleIndex].enableRule = enable;
     }
-
-    // Rule exists — check if already in desired state
-    if (rules[ruleIndex].enableRule === enable) {
-      console.log(`[RouterSync] Rule for ${macAddress} already ${enable ? 'enabled' : 'disabled'}. No change needed.`);
-      return;
-    }
-
-    // Update the rule
-    rules[ruleIndex] = { ...rules[ruleIndex], enableRule: enable };
-    console.log(`[RouterSync] Updating rule "${rules[ruleIndex].remark}" → enableRule: ${enable}`);
 
     await this.saveMacRules(sessionId, rules);
-    console.log(`[RouterSync] Successfully updated MAC rule for ${macAddress}.`);
   }
 
-  /**
-   * Sync a WifiUser with the router.
-   * Active users have their MAC rule enabled; expired users get blocked.
-   */
-  static async syncUser(user: IWifiUser): Promise<void> {
-    if (!user.macAddress) {
-      console.warn(`[RouterSync] Skipping "${user.name}" — no MAC address set.`);
-      return;
+  public static async getRouterData(cmd: number, sessionId?: string): Promise<any> {
+    const sId = sessionId || await this.ensureLoggedIn();
+    try {
+        const data = await routerPost({ cmd }, sId);
+        // If router session expired (Error 104), clear cache and retry once
+        if (data && data.error_code === 104) {
+            console.log(`[RouterSync] Session expired (104). Re-authenticating...`);
+            this.cachedSessionId = null;
+            const newSId = await this.ensureLoggedIn();
+            return await routerPost({ cmd }, newSId);
+        }
+        return data;
+    } catch (e) {
+        this.cachedSessionId = null;
+        throw e;
     }
+  }
 
-    // Propagate errors so controllers/UI know the router sync failed
+  public static async getSignalStatus(): Promise<any> {
+    try {
+      // Command 1018 provides both signal and traffic info in an array called device_info
+      const response = await this.getRouterData(1018);
+      if (!response.success || !Array.isArray(response.device_info)) {
+        return {
+          rsrp: '0',
+          sinr: '0',
+          signalLevel: '0',
+          networkType: 'N/A',
+          enrch_rsrp: '0',
+          enrch_sinr: '0'
+        };
+      }
+
+      const latest = response.device_info[response.device_info.length - 1];
+      
+      const rsrp = latest.rsrp_4g || latest.rsrp || '0';
+      const sinr = latest.sinr_4g || latest.sinr || '0';
+      
+      // Calculate signal level (0-4 or 0-5) based on RSRP
+      let signalLevel = '0';
+      const rsrpVal = parseInt(rsrp);
+      if (rsrpVal > -80) signalLevel = '5';
+      else if (rsrpVal > -90) signalLevel = '4';
+      else if (rsrpVal > -100) signalLevel = '3';
+      else if (rsrpVal > -110) signalLevel = '2';
+      else if (rsrpVal > -120) signalLevel = '1';
+
+      return {
+        rsrp,
+        sinr,
+        signalLevel,
+        networkType: latest.network_type || 'N/A',
+        enrch_rsrp: latest.rsrp_5g || '0',
+        enrch_sinr: latest.sinr_5g || '0'
+      };
+    } catch (error) {
+      console.error('[RouterSync] Failed to get signal status:', error);
+      throw error;
+    }
+  }
+
+  public static async getConnectedDevices(): Promise<any[]> {
+    try {
+      const response = await this.getRouterData(223);
+      const deviceList = response.dhcp_list_info || response.device_list || response.list || [];
+      return deviceList.map((dev: any) => ({
+        id: dev.mac,
+        mac: dev.mac,
+        name: dev.host || dev.hostname || dev.name || 'Unknown Device',
+        ip: dev.ip,
+        isWhitelisted: false // Will be updated by the controller
+      }));
+    } catch (error) {
+      console.error('[RouterSync] Failed to get connected devices:', error);
+      return [];
+    }
+  }
+
+  public static async getTrafficStats(): Promise<any> {
+    try {
+      const response = await this.getRouterData(1018);
+      if (!response.success || !Array.isArray(response.device_info) || response.device_info.length < 2) {
+        return { uploadSpeed: '0', downloadSpeed: '0' };
+      }
+
+      const info = response.device_info;
+      const latest = info[info.length - 1];
+      const previous = info[info.length - 2];
+
+      // Assuming dl_flow and ul_flow are totals in MB
+      // Speed = (CurrentTotal - PreviousTotal) / (CurrentTime - PreviousTime)
+      const dl1 = parseFloat(latest.dl_flow);
+      const dl2 = parseFloat(previous.dl_flow);
+      const ul1 = parseFloat(latest.ul_flow);
+      const ul2 = parseFloat(previous.ul_flow);
+
+      const parseRouterTime = (timeStr: string) => {
+        // Format: "2026/04/06/12:18:33"
+        const parts = timeStr.split(/[\/:]/);
+        if (parts.length < 6) return Date.now();
+        return new Date(
+          parseInt(parts[0]),
+          parseInt(parts[1]) - 1,
+          parseInt(parts[2]),
+          parseInt(parts[3]),
+          parseInt(parts[4]),
+          parseInt(parts[5])
+        ).getTime();
+      };
+
+      const time1 = parseRouterTime(latest.time);
+      const time2 = parseRouterTime(previous.time);
+      
+      const seconds = Math.max(1, (time1 - time2) / 1000);
+
+      const dlDiff = dl1 - dl2;
+      const ulDiff = ul1 - ul2;
+
+      // Speed in KB/s (assuming flows are in MB)
+      const dlSpeed = dlDiff > 0 ? (dlDiff * 1024 / seconds).toFixed(2) : '0.00';
+      const ulSpeed = ulDiff > 0 ? (ulDiff * 1024 / seconds).toFixed(2) : '0.00';
+
+      return {
+        uploadSpeed: ulSpeed,
+        downloadSpeed: dlSpeed
+      };
+    } catch (error) {
+      console.error('[RouterSync] Failed to get traffic stats:', error);
+      return { uploadSpeed: '0', downloadSpeed: '0' };
+    }
+  }
+
+  static async syncUser(user: IWifiUser): Promise<void> {
+    if (!user.macAddress) return;
     await this.toggleMacRule(user.macAddress, user.name, user.status === 'active');
   }
 }

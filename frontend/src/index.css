@@ -150,3 +150,27 @@ html.light .skeleton-shimmer::after {
     rgba(255, 255, 255, 0)
   );
 }
+
+/* ── Premium UI Utilities ────────────────────────────────────── */
+.glass {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+html.light .glass {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.glow-indigo { filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5)); }
+.glow-emerald { filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5)); }
+.glow-amber   { filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.5)); }
+
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, var(--text-1), var(--text-2));
+}

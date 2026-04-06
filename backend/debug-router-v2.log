@@ -1,0 +1,51 @@
+◇ injecting env (7) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+--- RouterSync Debug Test ---
+[RouterSync] Starting login discovery...
+[RouterSync] Trying variant: sha256(token + pass)
+[RouterSync] Successfully logged in using "sha256(token + pass)"
+Signal: {
+  rsrp: '-96',
+  sinr: '14.5',
+  signalLevel: '3',
+  networkType: '5G(NSA)',
+  enrch_rsrp: '0',
+  enrch_sinr: '0'
+}
+Devices: [
+  {
+    id: '28:16:ad:62:f5:89',
+    mac: '28:16:ad:62:f5:89',
+    name: 'ReelRuckus',
+    ip: '192.168.1.152',
+    isWhitelisted: false
+  },
+  {
+    id: '3c:19:5e:40:e0:a7',
+    mac: '3c:19:5e:40:e0:a7',
+    name: 'kassim-s-A12',
+    ip: '192.168.1.141',
+    isWhitelisted: false
+  },
+  {
+    id: 'fc:1a:46:1d:70:31',
+    mac: 'fc:1a:46:1d:70:31',
+    name: 'Galaxy-A07',
+    ip: '192.168.1.149',
+    isWhitelisted: false
+  },
+  {
+    id: '24:f3:06:7f:a8:ba',
+    mac: '24:f3:06:7f:a8:ba',
+    name: 'itel-A06',
+    ip: '192.168.1.130',
+    isWhitelisted: false
+  },
+  {
+    id: 'e8:c9:13:6e:a6:80',
+    mac: 'e8:c9:13:6e:a6:80',
+    name: 'Galaxy-A16',
+    ip: '192.168.1.135',
+    isWhitelisted: false
+  }
+]
+Traffic: { uploadSpeed: 'NaN', downloadSpeed: 'NaN' }
