@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/* ── Dark mode (default) ─────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  --bg-app:       #0f172a;
+  --bg-card:      #1e293b;
+  --bg-card-alt:  rgba(30,41,59,0.8);
+  --bg-nav:       rgba(15,23,42,0.95);
+  --bg-input:     #0f172a;
+  --border:       rgba(51,65,85,0.5);
+  --border-solid: #334155;
+  --text-1:       #f1f5f9;
+  --text-2:       #94a3b8;
+  --text-3:       #64748b;
+  --text-4:       #475569;
+  --hover-bg:     rgba(51,65,85,0.4);
+}
+
+/* ── Light mode ─────────────────────────────────────────────── */
+html.light {
+  color-scheme: light;
+  --bg-app:       #f1f5f9;
+  --bg-card:      #ffffff;
+  --bg-card-alt:  rgba(255,255,255,0.9);
+  --bg-nav:       rgba(255,255,255,0.97);
+  --bg-input:     #f8fafc;
+  --border:       rgba(203,213,225,0.7);
+  --border-solid: #cbd5e1;
+  --text-1:       #0f172a;
+  --text-2:       #475569;
+  --text-3:       #64748b;
+  --text-4:       #94a3b8;
+  --hover-bg:     rgba(241,245,249,0.8);
+}
+
+/* ── Base ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background-color: var(--bg-app);
+  color: var(--text-1);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* ── Semantic theme classes (used in components) ─────────────── */
+.t-app    { background-color: var(--bg-app); }
+.t-card   { background-color: var(--bg-card); }
+.t-card-a { background-color: var(--bg-card-alt); }
+.t-nav    { background-color: var(--bg-nav); }
+.t-input  { background-color: var(--bg-input); }
+.t-border { border-color: var(--border); }
+.t-border-s { border-color: var(--border-solid); }
+.t-text-1 { color: var(--text-1); }
+.t-text-2 { color: var(--text-2); }
+.t-text-3 { color: var(--text-3); }
+.t-text-4 { color: var(--text-4); }
+.t-hover:hover { background-color: var(--hover-bg); }
+
+/* ── Light-mode card overrides for Tailwind bg-slate-* ────────
+   These remap the existing hard-coded slate classes in pages.    */
+html.light .bg-slate-900    { background-color: #f1f5f9 !important; }
+html.light .bg-slate-800    { background-color: #ffffff !important; }
+html.light .bg-slate-900\/80 { background-color: rgba(241,245,249,0.8) !important; }
+html.light .bg-slate-900\/50 { background-color: rgba(241,245,249,0.5) !important; }
+html.light .bg-slate-900\/40 { background-color: rgba(241,245,249,0.6) !important; }
+html.light .bg-slate-800\/80 { background-color: rgba(255,255,255,0.9) !important; }
+html.light .bg-slate-800\/70 { background-color: rgba(255,255,255,0.85) !important; }
+html.light .bg-slate-800\/50 { background-color: rgba(255,255,255,0.7) !important; }
+html.light .bg-slate-700\/40 { background-color: rgba(226,232,240,0.4) !important; }
+html.light .bg-slate-700\/30 { background-color: rgba(226,232,240,0.3) !important; }
+
+html.light .border-slate-700    { border-color: #cbd5e1 !important; }
+html.light .border-slate-700\/50 { border-color: rgba(203,213,225,0.5) !important; }
+html.light .divide-slate-700\/50 > * + * { border-color: rgba(203,213,225,0.5) !important; }
+
+html.light .text-white        { color: #0f172a !important; }
+html.light .text-slate-100    { color: #1e293b !important; }
+html.light .text-slate-200    { color: #334155 !important; }
+html.light .text-slate-300    { color: #475569 !important; }
+html.light .text-slate-400    { color: #64748b !important; }
+html.light .text-slate-500    { color: #94a3b8 !important; }
+html.light .text-slate-600    { color: #cbd5e1 !important; }
+
+html.light .bg-slate-900\/60 { background-color: rgba(241,245,249,0.7) !important; }
+
+/* ── Light-mode: remove all box-shadows ──────────────────────── */
+html.light *,
+html.light *::before,
+html.light *::after {
+  box-shadow: none !important;
+}
+
+/* Input / form overrides */
+html.light input, html.light select, html.light textarea {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.light input::placeholder { color: #94a3b8 !important; }
+
+/* scrollbar (webkit) */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-solid); border-radius: 99px; }
