@@ -8,8 +8,8 @@ const Layout = () => {
       className="flex min-h-screen font-sans transition-colors duration-300"
     >
       <Sidebar />
-      <main className="flex-1 w-full pb-20 md:pb-0 md:ml-64 overflow-x-hidden">
-        <div className="max-w-7xl mx-auto p-4 md:p-8">
+      <main className="flex-1 w-full pb-20 md:pb-0 md:ml-56 overflow-x-hidden">
+        <div className="max-w-7xl mx-auto p-3 md:p-6">
           <Outlet />
         </div>
       </main>

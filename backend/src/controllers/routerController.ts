@@ -5,10 +5,12 @@ export const getRouterStatus = async (req: Request, res: Response) => {
   try {
     const signal = await RouterSync.getSignalStatus();
     const traffic = await RouterSync.getTrafficStats();
+    const system = await RouterSync.getSystemStatus();
     
     res.json({
       signal,
       traffic,
+      system,
       success: true
     });
   } catch (error: any) {

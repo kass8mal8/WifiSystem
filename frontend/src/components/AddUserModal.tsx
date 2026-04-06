@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserPlus, Wifi, Clock, Calendar, CalendarDays, CheckCircle2, Loader2, X } from 'lucide-react';
+import { UserPlus, Wifi, Clock, Calendar, CalendarDays, Loader2, X } from 'lucide-react';
 import { createUser } from '../api';
 import type { WifiUser } from '../api';
 import { toast } from 'react-hot-toast';

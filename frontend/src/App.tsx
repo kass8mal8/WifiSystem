@@ -12,13 +12,26 @@ import UsersPage from './pages/UsersPage';
 import LoginPage from './pages/LoginPage';
 import ConfirmModal from './components/ConfirmModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, loading } = useAuth();
   
   if (loading) return (
-    <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center">
-      <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+    <div className="min-h-screen bg-[#0a0f1d] flex flex-col items-center justify-center gap-6">
+      <div className="relative">
+        <div className="absolute inset-0 bg-indigo-500 rounded-full blur-2xl opacity-20 animate-pulse"></div>
+        <div className="relative w-16 h-16 bg-slate-900 border border-white/10 rounded-2xl flex items-center justify-center overflow-hidden">
+           <div className="w-full h-full bg-gradient-to-tr from-indigo-500/20 to-transparent animate-pulse delay-75"></div>
+           <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-6 h-6 border-2 border-indigo-500 rounded-full border-t-transparent animate-spin"></div>
+           </div>
+        </div>
+      </div>
+      <div className="flex flex-col items-center gap-1">
+        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-400">System</span>
+        <span className="text-xs font-medium text-slate-500">Initializing secure link...</span>
+      </div>
     </div>
   );
   
@@ -136,7 +149,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppContent />
+        <SocketProvider>
+          <AppContent />
+        </SocketProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -253,12 +253,23 @@ export class RouterSync {
     const sId = sessionId || await this.ensureLoggedIn();
     try {
         const data = await routerPost({ cmd }, sId);
-        // If router session expired (Error 104), clear cache and retry once
-        if (data && data.error_code === 104) {
-            console.log(`[RouterSync] Session expired (104). Re-authenticating...`);
+        
+        // Comprehensive check for session expiration or unauthorized access
+        const isExpired = data && (
+            data.error_code === 104 || 
+            data.error === 104 || 
+            data.error === 101 || 
+            data.success === false
+        );
+
+        if (isExpired) {
+            console.warn(`[RouterSync] Session expired or invalid (Cmd: ${cmd}). Re-authenticating...`);
             this.cachedSessionId = null;
-            const newSId = await this.ensureLoggedIn();
-            return await routerPost({ cmd }, newSId);
+            // Only retry if we haven't already passed an explicit sessionId
+            if (!sessionId) {
+                const newSId = await this.ensureLoggedIn();
+                return await routerPost({ cmd }, newSId);
+            }
         }
         return data;
     } catch (e) {
@@ -367,17 +378,42 @@ export class RouterSync {
       const dlDiff = dl1 - dl2;
       const ulDiff = ul1 - ul2;
 
-      // Speed in KB/s (assuming flows are in MB)
-      const dlSpeed = dlDiff > 0 ? (dlDiff * 1024 / seconds).toFixed(2) : '0.00';
-      const ulSpeed = ulDiff > 0 ? (ulDiff * 1024 / seconds).toFixed(2) : '0.00';
+      // Speed in Mbps (assuming dl_flow is in MB and seconds is time diff)
+      // (MB * 8) / seconds = Mbps
+      const dlMbps = dlDiff > 0 ? ((dlDiff * 8) / seconds).toFixed(2) : '0.00';
+      const ulMbps = ulDiff > 0 ? ((ulDiff * 8) / seconds).toFixed(2) : '0.00';
 
       return {
-        uploadSpeed: ulSpeed,
-        downloadSpeed: dlSpeed
+        uploadSpeed: ulMbps,
+        downloadSpeed: dlMbps,
+        unit: 'Mbps'
       };
     } catch (error) {
       console.error('[RouterSync] Failed to get traffic stats:', error);
       return { uploadSpeed: '0', downloadSpeed: '0' };
+    }
+  }
+  
+  public static async getSystemStatus(): Promise<any> {
+    try {
+      const [res1018, res120] = await Promise.all([
+        this.getRouterData(1018),
+        this.getRouterData(120).catch(() => ({}))
+      ]);
+
+      const latest = res1018.device_info?.[res1018.device_info.length - 1] || {};
+      
+      return {
+        cpu: latest.cpu_usage || '0',
+        memory: latest.mem_usage || '0',
+        uptime: latest.sys_uptime || res120.uptime || '0',
+        wanIp: res120.wan_ip || '---',
+        model: res120.model_name || 'ZLT X17M',
+        firmware: res120.sw_version || '---'
+      };
+    } catch (error) {
+      console.error('[RouterSync] Failed to get system status:', error);
+      return { cpu: '0', memory: '0', uptime: '0', wanIp: '---' };
     }
   }
 
