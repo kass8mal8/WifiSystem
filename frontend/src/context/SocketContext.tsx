@@ -29,7 +29,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Dynamically determine the backend URL based on the current hostname
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const SERVER_URL = isLocalhost ? 'http://localhost:5000' : `http://${window.location.hostname}:5000`;
+    const SERVER_URL = isLocalhost ? 'https://wifisystem.onrender.com' : `http://${window.location.hostname}:5000`;
     
     console.log(`[Socket] Initializing connection to ${SERVER_URL}...`);
 
