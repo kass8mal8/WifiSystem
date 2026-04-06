@@ -12,8 +12,18 @@ function generateSessionId(): string {
 // env vars are loaded by index.ts at startup
 const ROUTER_URL = process.env.ROUTER_URL || 'http://192.168.1.1';
 const ROUTER_USERNAME = process.env.ROUTER_USERNAME || 'admin';
-const ROUTER_PASSWORD = process.env.ROUTER_PASSWORD || '';
+const ROUTER_PASSWORD_RAW = process.env.ROUTER_PASSWORD || '';
 const CGI = `${ROUTER_URL}/cgi-bin/http.cgi`;
+
+function normalizeRouterPassword(input: string): string {
+  // Decode only valid %HH bytes so strings like "%m%22" become "%m\"".
+  // This avoids decodeURIComponent failures on non-encoded '%' characters.
+  return input.replace(/%([0-9a-fA-F]{2})/g, (_match, hex: string) =>
+    String.fromCharCode(parseInt(hex, 16))
+  );
+}
+
+const ROUTER_PASSWORD = normalizeRouterPassword(ROUTER_PASSWORD_RAW);
 
 interface MacRule {
   remark: string;
@@ -21,6 +31,11 @@ interface MacRule {
   enableRule: boolean;
   enableLink: boolean;
   [key: string]: any;
+}
+
+function isValidMacAddress(mac: string): boolean {
+  const normalized = mac.replace(/[:\-\s]/g, '');
+  return /^[0-9a-fA-F]{12}$/.test(normalized);
 }
 
 /**
@@ -50,6 +65,8 @@ async function routerPost(body: object, sessionId: string = ''): Promise<any> {
  * Uses the router's REST API directly — no browser automation required.
  */
 export class RouterSync {
+  // Cache a known-good login variant to avoid repeated failed attempts.
+  private static loginVariantIndex: number | null = null;
 
   /**
    * Step 1: Get a fresh session token from the router (cmd: 232).
@@ -70,35 +87,74 @@ export class RouterSync {
    * Per router login.js: passwd = sha256(token + plainPassword)
    */
   private static async login(): Promise<string> {
-    const token = await this.getSessionToken();
+    const buildLoginVariants = (token: string) => {
+      const candidates = Array.from(
+        new Set([ROUTER_PASSWORD, ROUTER_PASSWORD_RAW].filter(Boolean))
+      );
 
-    // From login.js: passwd: sha256_digest(token + passwd)
-    const hashedPassword = crypto.createHash('sha256').update(token + ROUTER_PASSWORD).digest('hex');
+      const variants: Array<{ requestSessionId: string; body: any }> = [];
+      for (const candidate of candidates) {
+        const hashTokenThenPass = crypto.createHash('sha256').update(token + candidate).digest('hex');
 
-    // The login POST requires a fresh random sessionId (not the token).
-    // Field names must match the router's login.js exactly: 'username' and 'passwd'.
-    const data = await routerPost({
-      cmd: 100,
-      method: 'POST',
-      username: ROUTER_USERNAME,
-      passwd: hashedPassword,
-      isAutoUpgrade: '0',
-      subcmd: 0,
-    }, generateSessionId());
+        variants.push({
+          // Mirrors login.js: sessionId=random, passwd=sha256(token + passwd)
+          requestSessionId: generateSessionId(),
+          body: {
+            cmd: 100,
+            method: 'POST',
+            username: ROUTER_USERNAME,
+            passwd: hashTokenThenPass,
+            isAutoUpgrade: '0',
+            subcmd: 0,
+          },
+        });
+      }
 
-    console.log(`[RouterSync] Login response: ${JSON.stringify(data)}`);
+      return variants;
+    };
 
-    if (data?.login_fail === 'fail' || data?.success === false) {
-      const lockTime = data?.login_time ? ` Router locked for ${data.login_time}s.` : '';
-      throw new Error(`Router login failed - check credentials or wait for lockout.${lockTime}`);
+    const isLocked = (data: any): boolean => data?.login_fail === 'fail' && Number(data?.login_time || '0') > 0;
+    const isSuccess = (data: any): boolean =>
+      !!data?.sessionId && data?.success !== false && data?.login_fail !== 'fail';
+
+    const tryVariant = async (variantIndex: number): Promise<string | null> => {
+      const token = await this.getSessionToken();
+      const variants = buildLoginVariants(token);
+      const variant = variants[variantIndex];
+      const data = await routerPost(variant.body, variant.requestSessionId);
+      console.log(`[RouterSync] Login response (variant ${variantIndex + 1}): ${JSON.stringify(data)}`);
+
+      if (isSuccess(data)) {
+        this.loginVariantIndex = variantIndex;
+        console.log(`[RouterSync] Login successful using variant ${variantIndex + 1}.`);
+        return data.sessionId;
+      }
+
+      if (isLocked(data)) {
+        const lockTime = data?.login_time ? ` Router locked for ${data.login_time}s.` : '';
+        throw new Error(`Router login failed due to invalid credentials.${lockTime}`);
+      }
+
+      return null;
+    };
+
+    // If we already discovered a working variant, try it first and only.
+    if (this.loginVariantIndex !== null) {
+      const sessionId = await tryVariant(this.loginVariantIndex);
+      if (sessionId) return sessionId;
+      // Firmware behavior may have changed; clear cache and continue fallback.
+      this.loginVariantIndex = null;
     }
 
-    if (!data?.sessionId) {
-      throw new Error(`[RouterSync] Login succeeded but no sessionId returned. Response: ${JSON.stringify(data)}`);
+    // Try minimal safe variants only. Stop immediately on lockout.
+    const bootstrapToken = await this.getSessionToken();
+    const variantCount = buildLoginVariants(bootstrapToken).length;
+    for (let i = 0; i < variantCount; i++) {
+      const sessionId = await tryVariant(i);
+      if (sessionId) return sessionId;
     }
 
-    console.log(`[RouterSync] Login successful.`);
-    return data.sessionId;
+    throw new Error('Router login failed for all supported Airtel/ZLT login variants. Verify router username/password.');
   }
 
   /**
@@ -138,6 +194,10 @@ export class RouterSync {
    */
   static async toggleMacRule(macAddress: string, userName: string, enable: boolean): Promise<void> {
     console.log(`[RouterSync] ${enable ? 'ENABLING' : 'DISABLING'} access for "${userName}" (${macAddress})`);
+
+    if (!isValidMacAddress(macAddress)) {
+      throw new Error(`[RouterSync] Invalid MAC address format: "${macAddress}". Expected 12 hex characters.`);
+    }
 
     const sessionId = await this.login();
     const rules = await this.getMacRules(sessionId);

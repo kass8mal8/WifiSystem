@@ -8,6 +8,7 @@ import Layout from './components/Layout';
 import DashboardPage from './pages/DashboardPage';
 import AddUserPage from './pages/AddUserPage';
 import ReportsPage from './pages/ReportsPage';
+import UsersPage from './pages/UsersPage';
 import ConfirmModal from './components/ConfirmModal';
 
 function App() {
@@ -65,14 +66,6 @@ function App() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex justify-center items-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
-      </div>
-    );
-  }
-
   return (
     <BrowserRouter>
       <Toaster 
@@ -94,8 +87,9 @@ function App() {
       <div className="relative z-10">
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<DashboardPage users={users} />} />
-            <Route path="reports" element={<ReportsPage users={users} onDelete={handleDeleteClick} onUpdate={handleUserUpdate} />} />
+            <Route index element={<DashboardPage users={users} loading={loading} />} />
+            <Route path="users" element={<UsersPage users={users} loading={loading} onDelete={handleDeleteClick} onUpdate={handleUserUpdate} onUserAdded={handleUserAdded} />} />
+            <Route path="reports" element={<ReportsPage users={users} loading={loading} />} />
             <Route path="add-user" element={<AddUserPage onUserAdded={handleUserAdded} />} />
           </Route>
         </Routes>

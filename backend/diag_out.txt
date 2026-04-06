@@ -1,0 +1,13 @@
+Γùç injecting env (5) from .env // tip: Γîÿ multiple files { path: ['.env.local', '.env'] }
+=== RouterSync Login Diagnostic ===
+Router URL: http://192.168.1.1
+Username: admin
+Password length: 13
+Password bytes: #(35) A(65) z(122) z(122) %(37) m(109) @(64) l(108) %(37) 2(50) 2(50) 0(48) 1(49)
+
+Token received: 3416fa6245a8d534c0f0b9a0df0765ba
+Node SHA256(token + password): e900cffdde636ea9d7fd2039f920bc1d60fca4ee1700ac2a1c9d8f55b165d46f
+
+--- BROWSER VERIFICATION (paste in http://192.168.1.1 DevTools console) ---
+sha256_digest("3416fa6245a8d534c0f0b9a0df0765ba" + "#Azz%m@l%2201")
+Expected: e900cffdde636ea9d7fd2039f920bc1d60fca4ee1700ac2a1c9d8f55b165d46f

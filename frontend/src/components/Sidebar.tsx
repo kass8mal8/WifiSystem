@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, UserPlus, Wifi, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Users, Wifi, Sun, Moon, BarChart3 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
 const Sidebar = () => {
@@ -7,8 +7,8 @@ const Sidebar = () => {
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
-    { name: 'Reports',   path: '/reports',   icon: <Users size={20} /> },
-    { name: 'Add User',  path: '/add-user',  icon: <UserPlus size={20} /> },
+    { name: 'Users',     path: '/users',     icon: <Users size={20} /> },
+    { name: 'Reports',   path: '/reports',   icon: <BarChart3 size={20} /> },
   ];
 
   return (

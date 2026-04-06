@@ -25,12 +25,14 @@ import {
   Activity,
   DollarSign
 } from 'lucide-react';
+import Skeleton from '../components/Skeleton';
 
 interface DashboardPageProps {
   users: WifiUser[];
+  loading?: boolean;
 }
 
-export default function DashboardPage({ users }: DashboardPageProps) {
+export default function DashboardPage({ users, loading = false }: DashboardPageProps) {
   const now = Date.now();
 
   // Use expiry date as the ground truth — catches legacy records with no status field
@@ -102,49 +104,60 @@ export default function DashboardPage({ users }: DashboardPageProps) {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          {
-            label: 'Total Revenue',
-            value: `Ksh ${totalRevenue.toLocaleString()}`,
-            icon: <DollarSign size={20} />,
-            color: 'indigo',
-            sub: `${users.length} total records`,
-          },
-          {
-            label: 'Active Users',
-            value: activeUsers,
-            icon: <CheckCircle2 size={20} />,
-            color: 'emerald',
-            sub: 'Currently connected',
-          },
-          {
-            label: 'Expired',
-            value: expiredUsers,
-            icon: <XCircle size={20} />,
-            color: 'rose',
-            sub: 'Access blocked',
-          },
-          {
-            label: 'Expiring Soon',
-            value: expiringSoon,
-            icon: <AlertTriangle size={20} />,
-            color: 'amber',
-            sub: 'Within 3 days',
-          },
-        ].map(card => (
-          <div
-            key={card.label}
-            className={`relative bg-slate-800 rounded-2xl p-5 border border-${card.color}-500/20 shadow-xl overflow-hidden group hover:border-${card.color}-500/40 transition-all duration-300`}
-          >
-            <div className={`absolute -right-4 -top-4 w-20 h-20 bg-${card.color}-500/10 rounded-full blur-xl group-hover:bg-${card.color}-500/20 transition-all`} />
-            <div className={`inline-flex p-2 rounded-lg bg-${card.color}-500/10 text-${card.color}-400 mb-3`}>
-              {card.icon}
+        {loading ? (
+          Array(4).fill(0).map((_, i) => (
+            <div key={i} className="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-xl">
+              <Skeleton variant="rect" width={32} height={32} className="mb-3 rounded-lg" />
+              <Skeleton width="60%" height={24} className="mb-1" />
+              <Skeleton width="40%" height={16} className="mb-1" />
+              <Skeleton width="30%" height={10} />
             </div>
-            <p className="text-2xl font-bold text-white">{card.value}</p>
-            <p className={`text-xs font-medium text-${card.color}-400 mt-0.5`}>{card.label}</p>
-            <p className="text-[11px] text-slate-500 mt-1">{card.sub}</p>
-          </div>
-        ))}
+          ))
+        ) : (
+          [
+            {
+              label: 'Total Revenue',
+              value: `Ksh ${totalRevenue.toLocaleString()}`,
+              icon: <DollarSign size={20} />,
+              color: 'indigo',
+              sub: `${users.length} total records`,
+            },
+            {
+              label: 'Active Users',
+              value: activeUsers,
+              icon: <CheckCircle2 size={20} />,
+              color: 'emerald',
+              sub: 'Currently connected',
+            },
+            {
+              label: 'Expired',
+              value: expiredUsers,
+              icon: <XCircle size={20} />,
+              color: 'rose',
+              sub: 'Access blocked',
+            },
+            {
+              label: 'Expiring Soon',
+              value: expiringSoon,
+              icon: <AlertTriangle size={20} />,
+              color: 'amber',
+              sub: 'Within 3 days',
+            },
+          ].map(card => (
+            <div
+              key={card.label}
+              className={`relative bg-slate-800 rounded-2xl p-5 border border-${card.color}-500/20 shadow-xl overflow-hidden group hover:border-${card.color}-500/40 transition-all duration-300`}
+            >
+              <div className={`absolute -right-4 -top-4 w-20 h-20 bg-${card.color}-500/10 rounded-full blur-xl group-hover:bg-${card.color}-500/20 transition-all`} />
+              <div className={`inline-flex p-2 rounded-lg bg-${card.color}-500/10 text-${card.color}-400 mb-3`}>
+                {card.icon}
+              </div>
+              <p className="text-2xl font-bold text-white">{card.value}</p>
+              <p className={`text-xs font-medium text-${card.color}-400 mt-0.5`}>{card.label}</p>
+              <p className="text-[11px] text-slate-500 mt-1">{card.sub}</p>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Charts Row */}
@@ -159,25 +172,38 @@ export default function DashboardPage({ users }: DashboardPageProps) {
             <span className="text-xs text-slate-500 bg-slate-900 px-2 py-1 rounded-full border border-slate-700">Ksh</span>
           </div>
           <div className="h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueTrend}>
-                <defs>
-                  <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="name" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px' }}
-                  itemStyle={{ color: '#6366f1' }}
-                  formatter={(v: unknown) => [`Ksh ${v}`, 'Revenue']}
-                />
-                <Area type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={2} fill="url(#revGrad)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <div className="w-full h-full flex flex-col gap-4">
+                <div className="flex-1 flex items-end gap-2 px-2">
+                  {Array(7).fill(0).map((_, i) => (
+                    <Skeleton key={i} variant="rect" width={`${100/7}%`} height={`${30 + Math.random() * 60}%`} className="rounded-t-md" />
+                  ))}
+                </div>
+                <div className="flex justify-between px-2">
+                  {Array(7).fill(0).map((_, i) => <Skeleton key={i} width={30} height={10} />)}
+                </div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={revenueTrend}>
+                  <defs>
+                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis dataKey="name" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px' }}
+                    itemStyle={{ color: '#6366f1' }}
+                    formatter={(v: unknown) => [`Ksh ${v}`, 'Revenue']}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={2} fill="url(#revGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -187,41 +213,57 @@ export default function DashboardPage({ users }: DashboardPageProps) {
             <Activity className="text-emerald-400" size={18} />
             <h3 className="text-base font-semibold text-white">User Status</h3>
           </div>
-          <div className="h-[160px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={statusData.length > 0 ? statusData : [{ name: 'No Data', value: 1 }]}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={75}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {(statusData.length > 0 ? statusData : [{ name: 'No Data', value: 1 }]).map((entry, i) => (
-                    <Cell
-                      key={i}
-                      fill={STATUS_COLORS[entry.name] || '#334155'}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="h-[160px] flex justify-center items-center">
+            {loading ? (
+              <Skeleton variant="circle" width={120} height={120} />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={statusData.length > 0 ? statusData : [{ name: 'No Data', value: 1 }]}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={75}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {(statusData.length > 0 ? statusData : [{ name: 'No Data', value: 1 }]).map((entry, i) => (
+                      <Cell
+                        key={i}
+                        fill={STATUS_COLORS[entry.name] || '#334155'}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
           <div className="space-y-2 mt-2">
-            {statusData.map(s => (
-              <div key={s.name} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] }} />
-                  <span className="text-slate-400">{s.name}</span>
+            {loading ? (
+              Array(3).fill(0).map((_, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Skeleton variant="circle" width={8} height={8} />
+                    <Skeleton width={60} height={10} />
+                  </div>
+                  <Skeleton width={20} height={10} />
                 </div>
-                <span className="font-medium text-white">{s.value}</span>
-              </div>
-            ))}
+              ))
+            ) : (
+              statusData.map(s => (
+                <div key={s.name} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] }} />
+                    <span className="text-slate-400">{s.name}</span>
+                  </div>
+                  <span className="font-medium text-white">{s.value}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -235,22 +277,33 @@ export default function DashboardPage({ users }: DashboardPageProps) {
             <h3 className="text-base font-semibold text-white">Payment Methods</h3>
           </div>
           <div className="h-[180px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={Object.entries(payMethods).map(([name, count]) => ({ name, count }))} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
-                <XAxis type="number" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis type="category" dataKey="name" stroke="#475569" fontSize={12} tickLine={false} axisLine={false} width={55} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px' }}
-                  cursor={{ fill: '#1e293b' }}
-                />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={28}>
-                  {Object.entries(payMethods).map((_entry, idx) => (
-                    <Cell key={idx} fill={METHOD_COLORS[idx % METHOD_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <div className="space-y-4">
+                {Array(2).fill(0).map((_, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Skeleton width={50} height={12} />
+                    <Skeleton variant="rect" width="100%" height={24} className="rounded-sm" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={Object.entries(payMethods).map(([name, count]) => ({ name, count }))} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                  <XAxis type="number" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="name" stroke="#475569" fontSize={12} tickLine={false} axisLine={false} width={55} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px' }}
+                    cursor={{ fill: '#1e293b' }}
+                  />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={28}>
+                    {Object.entries(payMethods).map((_entry, idx) => (
+                      <Cell key={idx} fill={METHOD_COLORS[idx % METHOD_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -260,7 +313,19 @@ export default function DashboardPage({ users }: DashboardPageProps) {
             <Wifi className="text-indigo-400" size={18} />
             <h3 className="text-base font-semibold text-white">Live Activity Feed</h3>
           </div>
-          {recentActivity.length === 0 ? (
+          {loading ? (
+            <div className="space-y-4">
+              {Array(6).fill(0).map((_, i) => (
+                <div key={i} className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-1">
+                    <Skeleton variant="circle" width={10} height={10} />
+                    <Skeleton width="60%" height={14} />
+                  </div>
+                  <Skeleton width={50} height={18} className="rounded-full" />
+                </div>
+              ))}
+            </div>
+          ) : recentActivity.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-[180px] text-slate-600">
               <Clock size={36} className="mb-3" />
               <p className="text-sm">No activity yet</p>
@@ -296,13 +361,22 @@ export default function DashboardPage({ users }: DashboardPageProps) {
           <Wifi size={22} className="text-indigo-400" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-semibold text-white">Airtel Smart Connect 5G</p>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Software gateway active. {activeUsers} device{activeUsers !== 1 ? 's' : ''} currently authorised.{' '}
-            {expiredUsers > 0 && (
-              <span className="text-rose-400 font-medium">{expiredUsers} expired and blocked.</span>
-            )}
-          </p>
+          {loading ? (
+            <>
+              <Skeleton width={150} height={16} className="mb-2" />
+              <Skeleton width="80%" height={12} />
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-white">Airtel Smart Connect 5G</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Software gateway active. {activeUsers} device{activeUsers !== 1 ? 's' : ''} currently authorised.{' '}
+                {expiredUsers > 0 && (
+                  <span className="text-rose-400 font-medium">{expiredUsers} expired and blocked.</span>
+                )}
+              </p>
+            </>
+          )}
         </div>
         <div className="flex gap-2 flex-wrap">
           <span className="text-[10px] font-medium px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Gateway: Online</span>
