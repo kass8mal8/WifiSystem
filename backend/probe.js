@@ -31,15 +31,17 @@ async function probe() {
     }, { headers: { 'Cookie': `sessionID=${sessionId}` } });
 
     console.log('Probing Command 1018 (Stats)...');
-    const res1018 = await axios.post(CGI, { cmd: 1018 }, { headers: { 'Cookie': `sessionID=${sessionId}` } });
-    const latest = res1018.data.device_info ? res1018.data.device_info[res1018.data.device_info.length - 1] : {};
+    const res1018 = await axios.post(CGI, { cmd: 1018, method: 'GET', sessionId }, { headers: { 'Cookie': `sessionID=${sessionId}` } });
+    const latest = res1018.data.device_info && res1018.data.device_info.length > 0 ? res1018.data.device_info[res1018.data.device_info.length - 1] : {};
     console.log('CMD 1018 Data Keys:', Object.keys(latest));
-    console.log('CMD 1018 Full Sample:', JSON.stringify(latest, null, 2));
-
+    
     console.log('Probing Command 120 (Hardware)...');
-    const res120 = await axios.post(CGI, { cmd: 120 }, { headers: { 'Cookie': `sessionID=${sessionId}` } });
+    const res120 = await axios.post(CGI, { cmd: 120, method: 'GET', sessionId }, { headers: { 'Cookie': `sessionID=${sessionId}` } });
     console.log('CMD 120 Data Keys:', Object.keys(res120.data));
-    console.log('CMD 120 Data:', JSON.stringify(res120.data, null, 2));
+
+    console.log('Probing Command 23 (MAC Filters)...');
+    const res23 = await axios.post(CGI, { cmd: 23, method: 'GET', sessionId }, { headers: { 'Cookie': `sessionID=${sessionId}` } });
+    console.log('CMD 23 Data:', JSON.stringify(res23.data, null, 2));
 
   } catch (err) {
     console.error('Probe failed:', err.message);

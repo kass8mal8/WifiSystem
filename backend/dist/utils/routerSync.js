@@ -374,7 +374,7 @@ class RouterSync {
                 const latest = ((_a = res1018.device_info) === null || _a === void 0 ? void 0 : _a[res1018.device_info.length - 1]) || {};
                 return {
                     cpu: latest.cpu_usage || latest.cpuusage || '0',
-                    memory: latest.mem_usage || latest.memusage || '0',
+                    memory: latest.ram_usage || latest.ramusage || latest.mem_usage || latest.memusage || latest.memory_usage || '0',
                     uptime: latest.sys_uptime || latest.sys_runtime || res120.runtime || res120.uptime || '0',
                     wanIp: res120.wan_ip || res120.wanip || '---',
                     model: res120.model_name || res120.modelname || 'ZLT X17M',
