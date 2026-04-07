@@ -45,7 +45,6 @@ export default function UsersPage({ users, loading, onDelete, onUpdate, onUserAd
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Member Directory</span>
           </div>
           <h2 className="text-3xl font-black text-[var(--text-1)]">User <span className="text-indigo-500">List</span></h2>
-          <p className="text-[var(--text-3)] text-sm mt-0.5">Manage all registered users and their status.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -121,7 +120,16 @@ export default function UsersPage({ users, loading, onDelete, onUpdate, onUserAd
                   return (
                     <tr key={user._id} className="hover:bg-[var(--hover-bg)] transition-colors group">
                       <td className="px-6 py-4 font-semibold text-[var(--text-1)]">
-                        {user.name}
+                        <div>{user.name}</div>
+                        <div className="mt-1.5 sm:hidden">
+                           <span className={`inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full border ${
+                              expired ? 'bg-rose-500/10 text-rose-500 border-rose-500/20' : 
+                              expiringSoon ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 
+                              'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                            }`}>
+                              {expired ? 'Expired' : expiringSoon ? 'Due Soon' : 'Active'}
+                           </span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 hidden md:table-cell font-mono text-[var(--text-3)] opacity-60 uppercase text-xs">{user.macAddress}</td>
                       <td className="px-6 py-4 hidden sm:table-cell text-center">

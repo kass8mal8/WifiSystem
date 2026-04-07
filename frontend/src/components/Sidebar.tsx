@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Users, Wifi, BarChart3, User, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -69,28 +69,28 @@ const Sidebar = () => {
       </div>
 
       {/* ── Mobile Bottom Nav ───────────────────────────── */}
-      <div
-        style={{ backgroundColor: 'var(--bg-nav)', borderColor: 'var(--border)' }}
-        className="md:hidden fixed bottom-0 left-0 w-full backdrop-blur-2xl border-t border-white/5 shadow-[0_-8px_40px_rgba(0,0,0,0.4)] z-50 transition-colors duration-300"
-      >
-        <nav className="flex justify-around items-center px-2 py-3 overflow-x-auto no-scrollbar">
+      <div className="md:hidden fixed bottom-5 left-4 right-4 z-50 flex justify-center pb-safe pointer-events-none">
+        <nav 
+          style={{ backgroundColor: 'var(--bg-nav)' }}
+          className="flex justify-around items-center px-1.5 py-1.5 backdrop-blur-3xl border border-[var(--border)] rounded-[2rem] shadow-[0_15px_40px_rgba(0,0,0,0.5)] w-full max-w-[400px] pointer-events-auto"
+        >
           {navItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
               end={item.path === '/'}
               className={({ isActive }) =>
-                `flex flex-col items-center p-2 rounded-2xl transition-all duration-200 min-w-[64px] ${
-                  isActive ? 'text-indigo-400' : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
+                `flex flex-col items-center p-2 transition-all duration-300 min-w-[50px] flex-1 ${
+                  isActive ? 'text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.5)] -translate-y-1' : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
                 }`
               }
             >
               {({ isActive }) => (
                 <>
-                  <div className={`p-2 rounded-xl mb-1 ${isActive ? 'bg-indigo-500/15' : ''}`}>
+                  <div className={`p-2.5 rounded-[1.25rem] mb-1 transition-all duration-300 ${isActive ? 'bg-indigo-500/20 shadow-inner border border-indigo-500/20 scale-110' : ''}`}>
                     {item.icon}
                   </div>
-                  <span className="text-[10px] font-black uppercase tracking-tight">{item.name}</span>
+                  <span className={`text-[8px] font-black uppercase tracking-widest transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-50'}`}>{item.name}</span>
                 </>
               )}
             </NavLink>

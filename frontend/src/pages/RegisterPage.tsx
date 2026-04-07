@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { registerUser } from '../api';
 import { toast } from 'react-hot-toast';
-import { User, Mail, Lock, Globe, Shield, Wifi, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
+import { User, Mail, Lock, Globe, Wifi, Loader2, ArrowLeft, ArrowRight } from 'lucide-react';
 
 const RegisterPage: React.FC = () => {
   const [formData, setFormData] = useState({

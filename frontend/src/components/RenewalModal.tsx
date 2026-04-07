@@ -139,7 +139,7 @@ export default function RenewalModal({ user, onRenew, onClose }: RenewalModalPro
               disabled={loading}
               className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center justify-center gap-2"
             >
-              {loading ? <RefreshCw size={18} className="animate-spin" /> : 'Confirm Renewal'}
+              {loading ? <RefreshCw size={18} className="animate-spin" /> : 'Confirm'}
             </button>
           </div>
         </form>

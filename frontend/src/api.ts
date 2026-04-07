@@ -1,13 +1,9 @@
 import axios from 'axios';
 
-const isLocalhost = 
-  window.location.hostname === 'localhost' || 
-  window.location.hostname === '127.0.0.1' || 
-  window.location.hostname === '0.0.0.0' || 
-  window.location.hostname.startsWith('192.168.'); 
+const isDev = import.meta.env.DEV;
 
-const API_URL = isLocalhost 
-  ? `http://${window.location.hostname}:5000/api` 
+const API_URL = isDev 
+  ? `/api` 
   : `https://wifisystem.onrender.com/api`;
 
 const api = axios.create({

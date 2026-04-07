@@ -42,6 +42,16 @@ export default defineConfig({
   server: {
     host: true,      // expose to all network interfaces (0.0.0.0)
     port: 5174,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      },
+      '/socket.io': {
+        target: 'http://localhost:5000',
+        ws: true
+      }
+    }
   },
   build: {
     chunkSizeWarningLimit: 1000,
