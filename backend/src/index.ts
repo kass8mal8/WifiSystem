@@ -86,8 +86,13 @@ mongoose
       });
     });
 
-    // Start background real-time router polling
-    startRouterPolling(io);
+    // Start background real-time router polling (only when running on the local network)
+    if (process.env.ENABLE_ROUTER_POLLING === 'true') {
+      console.log('[RouterEmitter] ENABLE_ROUTER_POLLING=true — starting local router polling...');
+      startRouterPolling(io);
+    } else {
+      console.log('[RouterEmitter] Router polling disabled (set ENABLE_ROUTER_POLLING=true to enable).');
+    }
 
     httpServer.listen(PORT, () => {
       console.log(`Server is running with WebSockets on port ${PORT}`);

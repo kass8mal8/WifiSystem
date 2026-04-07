@@ -82,8 +82,13 @@ mongoose_1.default
             console.log(`[Socket] User ${userId || socket.id} disconnected`);
         });
     });
-    // Start background real-time router polling
-    (0, routerEmitter_1.startRouterPolling)(io);
+    // Start background real-time router polling (only when running on the local network)
+    if (process.env.ENABLE_ROUTER_POLLING === 'true') {
+        console.log('[RouterEmitter] ENABLE_ROUTER_POLLING=true — starting local router polling...');
+        (0, routerEmitter_1.startRouterPolling)(io);
+    } else {
+        console.log('[RouterEmitter] Router polling disabled (set ENABLE_ROUTER_POLLING=true to enable).');
+    }
     httpServer.listen(PORT, () => {
         console.log(`Server is running with WebSockets on port ${PORT}`);
     });
