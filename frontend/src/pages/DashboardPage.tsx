@@ -265,7 +265,7 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
                     <h3 className="text-[10px] font-black text-[var(--text-1)] uppercase tracking-widest">Network Speed</h3>
                 </div>
                 
-                <div className="flex flex-row gap-2 relative z-10 w-full h-full">
+                <div className="flex flex-row gap-2 relative z-10 w-full h-full px-1 pb-1">
                     <div className="flex-1 bg-[var(--bg-app)]/40 p-2 lg:px-3 lg:py-2.5 rounded-xl border border-[var(--border)] shadow-inner flex flex-col justify-center overflow-hidden relative">
                         <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                         <div className="flex items-center justify-between mb-1">
