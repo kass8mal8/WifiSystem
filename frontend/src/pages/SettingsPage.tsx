@@ -133,7 +133,7 @@ export default function SettingsPage() {
 
             <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-4 flex gap-4 text-xs text-indigo-500 leading-relaxed shadow-sm">
                 <Info size={20} className="shrink-0 opacity-70" />
-                <p>These credentials are used by the background worker to fetch real-time telemetry and manage MAC filtering rules.</p>
+                <p>These credentials are used to fetch real-time telemetry and manage MAC filtering rules.</p>
             </div>
 
             <button

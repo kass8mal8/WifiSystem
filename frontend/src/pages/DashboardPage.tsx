@@ -255,53 +255,53 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
         <div className="lg:col-span-4 space-y-4 flex flex-col h-full">
             
             {/* INTERNET SPEED */}
-            <div className="bg-[var(--bg-card)] backdrop-blur-xl rounded-[1.25rem] p-4 lg:p-5 shadow-sm relative overflow-hidden group border border-[var(--border)] hover:border-emerald-500/20 transition-all duration-500">
+            <div className="bg-[var(--bg-card)] backdrop-blur-xl rounded-[1.25rem] p-3 shadow-sm relative overflow-hidden group border border-[var(--border)] hover:border-emerald-500/20 transition-all duration-500">
                 <div className="absolute bottom-[-10%] right-[-10%] w-32 h-32 bg-emerald-500/5 rounded-full blur-[40px] pointer-events-none group-hover:bg-emerald-500/10 transition-colors duration-700"></div>
                 
-                <div className="flex items-center gap-3 mb-4 relative z-10">
-                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm group-hover:rotate-3 transition-transform">
-                        <Activity size={16} />
+                <div className="flex items-center gap-2 mb-2 relative z-10">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm group-hover:rotate-3 transition-transform">
+                        <Activity size={14} />
                     </div>
-                    <h3 className="text-[10.5px] font-black text-[var(--text-1)] uppercase tracking-widest">Network Speed</h3>
+                    <h3 className="text-[10px] font-black text-[var(--text-1)] uppercase tracking-widest">Network Speed</h3>
                 </div>
                 
-                <div className="flex flex-row gap-4 relative z-10 w-full h-full">
-                    <div className="flex-1 bg-[var(--bg-app)]/40 p-4 rounded-xl border border-[var(--border)] shadow-inner flex flex-col justify-center overflow-hidden relative">
+                <div className="flex flex-row gap-2 relative z-10 w-full h-full">
+                    <div className="flex-1 bg-[var(--bg-app)]/40 p-2 lg:px-3 lg:py-2.5 rounded-xl border border-[var(--border)] shadow-inner flex flex-col justify-center overflow-hidden relative">
                         <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 text-emerald-400 font-black text-[9px] uppercase tracking-widest">
-                            <ArrowDownCircle size={14} className="animate-bounce" style={{ animationDuration: '3s' }} />
+                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5 text-emerald-400 font-black text-[8px] uppercase tracking-widest">
+                            <ArrowDownCircle size={12} className="animate-bounce" style={{ animationDuration: '3s' }} />
                             <span>Download</span>
                         </div>
                         </div>
-                        <div className="flex items-baseline gap-1 mt-1 z-10">
+                        <div className="flex items-baseline gap-1 z-10">
                         {!isSyncing ? (
                             <>
-                            <span className="text-2xl font-black text-[var(--text-1)] tracking-tighter drop-shadow-[0_0_8px_rgba(52,211,153,0.15)]">{routerStatus.traffic.downloadSpeed}</span>
-                            <span className="text-[9px] font-black text-emerald-500 uppercase">{routerStatus.traffic.unit || 'Mbps'}</span>
+                            <span className="text-xl lg:text-2xl font-black text-[var(--text-1)] tracking-tighter drop-shadow-[0_0_8px_rgba(52,211,153,0.15)]">{routerStatus.traffic.downloadSpeed}</span>
+                            <span className="text-[8px] font-black text-emerald-500 uppercase">{routerStatus.traffic.unit || 'Mbps'}</span>
                             </>
                         ) : (
-                            <Skeleton width="100%" height={40} className="rounded-lg" />
+                            <Skeleton width="100%" height={32} className="rounded-lg" />
                         )}
                         </div>
                     </div>
 
-                    <div className="flex-1 bg-[var(--bg-app)]/40 p-4 rounded-xl border border-[var(--border)] shadow-inner flex flex-col justify-center overflow-hidden relative">
+                    <div className="flex-1 bg-[var(--bg-app)]/40 p-2 lg:px-3 lg:py-2.5 rounded-xl border border-[var(--border)] shadow-inner flex flex-col justify-center overflow-hidden relative">
                         <div className="absolute inset-0 bg-gradient-to-t from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 text-indigo-400 font-black text-[9px] uppercase tracking-widest">
-                            <ArrowUpCircle size={14} className="animate-bounce" style={{ animationDuration: '3.5s', animationDelay: '0.5s' }} />
+                        <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5 text-indigo-400 font-black text-[8px] uppercase tracking-widest">
+                            <ArrowUpCircle size={12} className="animate-bounce" style={{ animationDuration: '3.5s', animationDelay: '0.5s' }} />
                             <span>Upload</span>
                         </div>
                         </div>
-                        <div className="flex items-baseline gap-1 mt-1 z-10">
+                        <div className="flex items-baseline gap-1 z-10">
                         {!isSyncing ? (
                             <>
-                            <span className="text-2xl font-black text-[var(--text-1)] tracking-tighter drop-shadow-[0_0_8px_rgba(99,102,241,0.15)]">{routerStatus.traffic.uploadSpeed}</span>
-                            <span className="text-[9px] font-black text-indigo-400 uppercase">{routerStatus.traffic.unit || 'Mbps'}</span>
+                            <span className="text-xl lg:text-2xl font-black text-[var(--text-1)] tracking-tighter drop-shadow-[0_0_8px_rgba(99,102,241,0.15)]">{routerStatus.traffic.uploadSpeed}</span>
+                            <span className="text-[8px] font-black text-indigo-400 uppercase">{routerStatus.traffic.unit || 'Mbps'}</span>
                             </>
                         ) : (
-                            <Skeleton width="100%" height={40} className="rounded-lg" />
+                            <Skeleton width="100%" height={32} className="rounded-lg" />
                         )}
                         </div>
                     </div>
@@ -461,7 +461,7 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
                                             <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full border shadow-sm transition-colors ${
                                                 isRegistered ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20 group-hover/row:bg-rose-500/20'
                                             }`}>
-                                                {isRegistered ? 'Authorized' : 'Guest Null'}
+                                                {isRegistered ? 'Authorized' : 'Guest'}
                                             </span>
                                             {isRegistered ? <ShieldCheck className="text-emerald-500" size={16} /> : <ShieldAlert className="text-rose-500" size={16} />}
                                         </div>

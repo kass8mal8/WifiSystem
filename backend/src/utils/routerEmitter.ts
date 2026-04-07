@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import { RouterSync } from './routerSync';
 import User from '../models/User';
+import WifiUser from '../models/WifiUser';
 
 let isPollingActive = false;
 let currentTimeout: NodeJS.Timeout | null = null;
@@ -77,7 +78,7 @@ export const startRouterPolling = (io: Server) => {
                 ]);
 
                 // Emit to each user connected to THIS router
-                data.users.forEach(user => {
+                for (const user of data.users) {
                   const roomName = `user:${user._id}`;
                   
                   io.to(roomName).emit('router_status', { 
@@ -88,11 +89,35 @@ export const startRouterPolling = (io: Server) => {
                       timestamp: Date.now()
                   });
                   
-                  io.to(roomName).emit('router_devices', { 
-                      devices, 
-                      success: true 
-                  });
-                });
+                  // Enrich devices specifically for this user
+                  try {
+                      const wifiUsers = await WifiUser.find({ adminId: user._id });
+                      const userMacMap = new Map();
+                      wifiUsers.forEach((u: any) => {
+                        if (u.macAddress) {
+                          userMacMap.set(u.macAddress.replace(/[:\-\s]/g, '').toLowerCase(), { name: u.name, status: u.status });
+                        }
+                      });
+                      
+                      const enrichedDevices = devices.map((dev: any) => {
+                        const newDev = { ...dev }; // Copy to prevent shared state interference among multiple admins
+                        const normalizedMac = newDev.mac.replace(/[:\-\s]/g, '').toLowerCase();
+                        if (userMacMap.has(normalizedMac)) {
+                          const matchingUser = userMacMap.get(normalizedMac);
+                          newDev.name = matchingUser.name;
+                          newDev.isWhitelisted = matchingUser.status === 'active';
+                        }
+                        return newDev;
+                      });
+
+                      io.to(roomName).emit('router_devices', { 
+                          devices: enrichedDevices, 
+                          success: true 
+                      });
+                  } catch (e) {
+                      io.to(roomName).emit('router_devices', { devices, success: true });
+                  }
+                }
 
               } catch (error) {
                 console.error(`[RouterEmitter] Error polling router at ${url}:`, error);

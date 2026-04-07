@@ -30,8 +30,8 @@ const DEFAULT_ROUTER_PASS_RAW = process.env.ROUTER_PASSWORD || '';
 interface MacRule {
   remark: string;
   mac: string;
-  enableRule: boolean;
-  enableLink: boolean;
+  enableRule: number;
+  enableLink: number;
   [key: string]: any;
 }
 
@@ -220,13 +220,13 @@ export class RouterSync {
     throw new Error(`No session token from router at ${routerUrl}`);
   }
 
-  private static async getMacRules(routerUrl: string, sessionId: string): Promise<MacRule[]> {
+  private static async getMacRules(routerUrl: string, sessionId: string): Promise<any> {
     const filtersData = await routerPost(routerUrl, { cmd: 23 }, sessionId);
-    return filtersData?.datas || [];
+    return filtersData || { isEnable: "1", filterPolite: "0", datas: [] };
   }
 
-  private static async saveMacRules(routerUrl: string, sessionId: string, rules: MacRule[]): Promise<void> {
-    await routerPost(routerUrl, { cmd: 23, method: 'POST', datas: rules }, sessionId);
+  private static async saveMacRules(routerUrl: string, sessionId: string, filtersData: any): Promise<void> {
+    await routerPost(routerUrl, { cmd: 23, method: 'POST', ...filtersData }, sessionId);
     await routerPost(routerUrl, { cmd: 20 }, sessionId);
   }
 
@@ -236,22 +236,29 @@ export class RouterSync {
     }
 
     const sessionId = await this.ensureLoggedIn(config);
-    let rules = await this.getMacRules(config.routerUrl, sessionId);
+    const filtersData = await this.getMacRules(config.routerUrl, sessionId);
+    let rules = filtersData.datas || [];
 
     const normalizedTarget = macAddress.replace(/[:\-\s]/g, '').toLowerCase();
     const ruleIndex = rules.findIndex(
-      r => r.mac.replace(/[:\-\s]/g, '').toLowerCase() === normalizedTarget
+      (r: any) => r.mac.replace(/[:\-\s]/g, '').toLowerCase() === normalizedTarget
     );
 
     if (ruleIndex === -1) {
       if (!enable) return;
-      rules.push({ remark: userName, mac: macAddress, enableRule: true, enableLink: true });
+      rules.push({ remark: userName, mac: macAddress, enableRule: 1, enableLink: 1 });
     } else {
-      if (rules[ruleIndex].enableRule === enable) return;
-      rules[ruleIndex].enableRule = enable;
+      if (rules[ruleIndex].enableRule == (enable ? 1 : 0)) return;
+      rules[ruleIndex].enableRule = enable ? 1 : 0;
     }
 
-    await this.saveMacRules(config.routerUrl, sessionId, rules);
+    filtersData.datas = rules;
+    
+    // ensure basic keys exist if it was empty from the router
+    if (!filtersData.hasOwnProperty('isEnable')) filtersData.isEnable = "1";
+    if (!filtersData.hasOwnProperty('filterPolite')) filtersData.filterPolite = "0";
+
+    await this.saveMacRules(config.routerUrl, sessionId, filtersData);
   }
 
   public static async getRouterData(config: RouterConfig, cmd: number, sessionId?: string): Promise<any> {
