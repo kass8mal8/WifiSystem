@@ -1,11 +1,26 @@
 import { Request, Response } from 'express';
-import { RouterSync } from '../utils/routerSync';
+import { RouterSync, RouterConfig } from '../utils/routerSync';
+import User from '../models/User';
 
-export const getRouterStatus = async (req: Request, res: Response) => {
+const getRouterConfig = (admin: any): RouterConfig => ({
+  routerUrl: admin.routerUrl || 'http://192.168.1.1',
+  routerUsername: admin.routerUsername || 'admin',
+  routerPasswordRaw: admin.routerPassword || ''
+});
+
+export const getRouterStatus = async (req: any, res: Response) => {
   try {
-    const signal = await RouterSync.getSignalStatus();
-    const traffic = await RouterSync.getTrafficStats();
-    const system = await RouterSync.getSystemStatus();
+    const adminId = req.user.id;
+    const admin = await User.findById(adminId);
+    if (!admin) return res.status(404).json({ message: 'Admin not found', success: false });
+
+    const config = getRouterConfig(admin);
+    
+    const [signal, traffic, system] = await Promise.all([
+      RouterSync.getSignalStatus(config),
+      RouterSync.getTrafficStats(config),
+      RouterSync.getSystemStatus(config)
+    ]);
     
     res.json({
       signal,
@@ -18,9 +33,15 @@ export const getRouterStatus = async (req: Request, res: Response) => {
   }
 };
 
-export const getConnectedDevices = async (req: Request, res: Response) => {
+export const getConnectedDevices = async (req: any, res: Response) => {
   try {
-    const devices = await RouterSync.getConnectedDevices();
+    const adminId = req.user.id;
+    const admin = await User.findById(adminId);
+    if (!admin) return res.status(404).json({ message: 'Admin not found', success: false });
+
+    const config = getRouterConfig(admin);
+    const devices = await RouterSync.getConnectedDevices(config);
+    
     res.json({
       devices,
       success: true

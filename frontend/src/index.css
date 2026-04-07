@@ -70,6 +70,9 @@ html.light .bg-slate-800\/70 { background-color: rgba(255,255,255,0.85) !importa
 html.light .bg-slate-800\/50 { background-color: rgba(255,255,255,0.7) !important; }
 html.light .bg-slate-700\/40 { background-color: rgba(226,232,240,0.4) !important; }
 html.light .bg-slate-700\/30 { background-color: rgba(226,232,240,0.3) !important; }
+html.light .bg-\[\#141417\]\/40 { background-color: rgba(255, 255, 255, 0.6) !important; }
+html.light .bg-slate-800\/40 { background-color: rgba(255, 255, 255, 0.4) !important; }
+html.light .bg-slate-900\/30 { background-color: rgba(241, 245, 249, 0.3) !important; }
 
 html.light .border-slate-700    { border-color: #cbd5e1 !important; }
 html.light .border-slate-700\/50 { border-color: rgba(203,213,225,0.5) !important; }

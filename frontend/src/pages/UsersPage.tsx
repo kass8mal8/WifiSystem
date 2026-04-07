@@ -44,18 +44,18 @@ export default function UsersPage({ users, loading, onDelete, onUpdate, onUserAd
             <Users className="text-indigo-400" size={16} />
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Member Directory</span>
           </div>
-          <h2 className="hidden md:block text-3xl font-black text-white">User <span className="text-indigo-500">List</span></h2>
-          <p className="hidden md:block text-slate-400 text-sm mt-0.5">Manage all registered users and their status.</p>
+          <h2 className="text-3xl font-black text-[var(--text-1)]">User <span className="text-indigo-500">List</span></h2>
+          <p className="text-[var(--text-3)] text-sm mt-0.5">Manage all registered users and their status.</p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="bg-slate-900/40 px-4 py-2 rounded-xl border border-slate-700/50 flex gap-4">
-            <span className="flex items-center gap-1.5 text-emerald-400 text-[10px] font-black uppercase">
-              <span className="w-1 h-1 bg-emerald-400 rounded-full"/>
+          <div className="bg-[var(--bg-card-alt)] px-4 py-2 rounded-xl border border-[var(--border)] flex gap-4">
+            <span className="flex items-center gap-1.5 text-emerald-500 text-[10px] font-black uppercase">
+              <span className="w-1 h-1 bg-emerald-500 rounded-full"/>
               {activeCount} Active
             </span>
-            <span className="flex items-center gap-1.5 text-rose-400 text-[10px] font-black uppercase">
-              <span className="w-1 h-1 bg-rose-400 rounded-full"/>
+            <span className="flex items-center gap-1.5 text-rose-500 text-[10px] font-black uppercase">
+              <span className="w-1 h-1 bg-rose-500 rounded-full"/>
               {expiredCount} Expired
             </span>
           </div>
@@ -71,23 +71,23 @@ export default function UsersPage({ users, loading, onDelete, onUpdate, onUserAd
       {/* Search & Filters */}
       <div className="flex gap-4">
          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-3)]" size={16} />
             <input 
                type="text" 
                placeholder="Search by name or MAC..." 
                value={search}
                onChange={(e) => setSearch(e.target.value)}
-               className="w-full bg-slate-800/40 border border-white/5 rounded-xl py-3 pl-11 pr-4 text-sm text-white focus:outline-none focus:border-indigo-500/50 transition-all"
+               className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded-xl py-3 pl-11 pr-4 text-sm text-[var(--text-1)] focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-[var(--text-4)]"
             />
          </div>
-         <button className="p-3 rounded-xl bg-slate-800/40 border border-white/5 text-slate-400"><Filter size={16}/></button>
+         <button className="p-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors"><Filter size={16}/></button>
       </div>
 
-      {/* Table */}
-      <div className="bg-slate-800/40 rounded-2xl border border-white/5 overflow-hidden">
+      {/* Table Card */}
+      <div className="bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-400">
-            <thead className="text-[11px] text-slate-500 uppercase tracking-widest bg-slate-900/60">
+          <table className="w-full text-left text-sm text-[var(--text-2)]">
+            <thead className="text-[11px] text-[var(--text-3)] uppercase tracking-widest bg-[var(--bg-app)]/50 border-b border-[var(--border)]">
               <tr>
                 <th className="px-6 py-4 font-black">Name</th>
                 <th className="px-6 py-4 font-black hidden md:table-cell">MAC Address</th>
@@ -97,7 +97,7 @@ export default function UsersPage({ users, loading, onDelete, onUpdate, onUserAd
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y border-[var(--border)] divide-[var(--border)]">
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
@@ -111,7 +111,7 @@ export default function UsersPage({ users, loading, onDelete, onUpdate, onUserAd
                 ))
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-slate-600 uppercase font-black tracking-widest opacity-50">No users found</td>
+                  <td colSpan={6} className="px-6 py-16 text-center text-[var(--text-4)] uppercase font-black tracking-widest opacity-50">No users found</td>
                 </tr>
               ) : (
                 filteredUsers.map(user => {
@@ -119,33 +119,33 @@ export default function UsersPage({ users, loading, onDelete, onUpdate, onUserAd
                   const expired = !isActive(user);
                   const expiringSoon = !expired && expiry.getTime() < now + 3 * 24 * 60 * 60 * 1000;
                   return (
-                    <tr key={user._id} className="hover:bg-white/5 transition-colors group">
-                      <td className="px-6 py-4 font-semibold text-slate-200">
+                    <tr key={user._id} className="hover:bg-[var(--hover-bg)] transition-colors group">
+                      <td className="px-6 py-4 font-semibold text-[var(--text-1)]">
                         {user.name}
                       </td>
-                      <td className="px-6 py-4 hidden md:table-cell font-mono text-slate-500 opacity-60 uppercase text-xs">{user.macAddress}</td>
+                      <td className="px-6 py-4 hidden md:table-cell font-mono text-[var(--text-3)] opacity-60 uppercase text-xs">{user.macAddress}</td>
                       <td className="px-6 py-4 hidden sm:table-cell text-center">
                         <span className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border ${
-                          expired ? 'bg-rose-500/5 text-rose-400 border-rose-500/10' : 
-                          expiringSoon ? 'bg-amber-500/5 text-amber-400 border-amber-500/10' : 
-                          'bg-emerald-500/5 text-emerald-400 border-emerald-500/10'
+                          expired ? 'bg-rose-500/5 text-rose-500 border-rose-500/20' : 
+                          expiringSoon ? 'bg-amber-500/5 text-amber-500 border-amber-500/20' : 
+                          'bg-emerald-500/5 text-emerald-500 border-emerald-500/20'
                         }`}>
                           {expired ? 'Expired' : expiringSoon ? 'Due Soon' : 'Active'}
                         </span>
                       </td>
                       <td className="px-6 py-4 hidden sm:table-cell">
-                        <p className="text-slate-400">{expiry.toLocaleDateString()}</p>
-                        <p className="text-[11px] text-slate-600 mt-0.5">{expiry.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                        <p className="text-[var(--text-2)]">{expiry.toLocaleDateString()}</p>
+                        <p className="text-[11px] text-[var(--text-3)] mt-0.5">{expiry.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                       </td>
-                      <td className="px-6 py-4 font-black text-white">Ksh {parseFloat(user.amountPaid.toString()).toFixed(0)}</td>
+                      <td className="px-6 py-4 font-black text-[var(--text-1)]">Ksh {parseFloat(user.amountPaid.toString()).toFixed(0)}</td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2.5">
                           <button onClick={() => setSelectedUser(user)}
-                            className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all shadow-sm">
+                            className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-500 hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
                             <RefreshCw size={14}/>
                           </button>
                           <button onClick={() => user._id && onDelete(user._id)}
-                            className="p-2.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm">
+                            className="p-2.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-600 hover:text-white transition-all shadow-sm">
                             <Trash2 size={14}/>
                           </button>
                         </div>

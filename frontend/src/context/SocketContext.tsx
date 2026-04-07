@@ -27,20 +27,23 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
+    const token = localStorage.getItem('token');
+    
     // Dynamically determine the backend URL based on the current hostname
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const SERVER_URL = isLocalhost ? 'https://wifisystem.onrender.com' : `http://${window.location.hostname}:5000`;
+    const SERVER_URL = isLocalhost ? 'http://localhost:5000' : 'https://wifisystem.onrender.com';
     
-    console.log(`[Socket] Initializing connection to ${SERVER_URL}...`);
+    console.log(`[Socket] Initializing secure connection to ${SERVER_URL}...`);
 
     const newSocket = io(SERVER_URL, {
+      auth: { token }, // Send JWT for backend verification
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
       timeout: 10000,
     });
 
     newSocket.on('connect', () => {
-      console.log('[Socket] Connected to backend real-time stream:', newSocket.id);
+      console.log('[Socket] Connected as authenticated user:', newSocket.id);
       setIsConnected(true);
     });
 
@@ -50,7 +53,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     newSocket.on('disconnect', (reason) => {
-      console.log('[Socket] Disconnected from stream:', reason);
+      console.log('[Socket] Disconnected:', reason);
       setIsConnected(false);
     });
 

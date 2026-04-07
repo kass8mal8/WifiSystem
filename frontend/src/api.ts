@@ -1,6 +1,14 @@
 import axios from 'axios';
 
-const API_URL = 'https://wifisystem.onrender.com/api';
+const isLocalhost = 
+  window.location.hostname === 'localhost' || 
+  window.location.hostname === '127.0.0.1' || 
+  window.location.hostname === '0.0.0.0' || 
+  window.location.hostname.startsWith('192.168.'); 
+
+const API_URL = isLocalhost 
+  ? `http://${window.location.hostname}:5000/api` 
+  : `https://wifisystem.onrender.com/api`;
 
 const api = axios.create({
   baseURL: API_URL,
@@ -70,6 +78,16 @@ export const updateUser = async (id: string, userData: any): Promise<WifiUser> =
 // Auth APIs
 export const loginUser = async (credentials: any) => {
   const response = await api.post('/auth/login', credentials);
+  return response.data;
+};
+
+export const registerUser = async (userData: any) => {
+  const response = await api.post('/auth/register', userData);
+  return response.data;
+};
+
+export const updateRouterSettings = async (settings: any) => {
+  const response = await api.put('/auth/me/router', settings);
   return response.data;
 };
 

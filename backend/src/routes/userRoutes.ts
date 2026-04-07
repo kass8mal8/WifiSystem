@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { getUsers, createUser, deleteUser, updateUser } from '../controllers/userController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/', getUsers);
-router.post('/', createUser);
-router.delete('/:id', deleteUser);
-router.put('/:id', updateUser);
+// Apply authentication to all user management routes
+router.get('/', authenticate, getUsers);
+router.post('/', authenticate, createUser);
+router.delete('/:id', authenticate, deleteUser);
+router.put('/:id', authenticate, updateUser);
 
 export default router;

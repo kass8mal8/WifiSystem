@@ -9,20 +9,23 @@ function generateSessionId(): string {
   return crypto.randomBytes(16).toString('hex') + crypto.randomBytes(16).toString('hex');
 }
 
-// env vars are loaded by index.ts at startup
-const ROUTER_URL = process.env.ROUTER_URL || 'http://192.168.1.1';
-const ROUTER_USERNAME = process.env.ROUTER_USERNAME || 'admin';
-const ROUTER_PASSWORD_RAW = process.env.ROUTER_PASSWORD || '';
-const CGI = `${ROUTER_URL}/cgi-bin/http.cgi`;
+export interface RouterConfig {
+  routerUrl: string;
+  routerUsername: string;
+  routerPasswordRaw: string;
+}
 
 function normalizeRouterPassword(input: string): string {
+  if (!input) return '';
   // Decode only valid %HH bytes so strings like "%m%22" become "%m\"".
   return input.replace(/%([0-9a-fA-F]{2})/g, (_match, hex: string) =>
     String.fromCharCode(parseInt(hex, 16))
   );
 }
 
-const ROUTER_PASSWORD = normalizeRouterPassword(ROUTER_PASSWORD_RAW);
+const DEFAULT_ROUTER_URL = process.env.ROUTER_URL || 'http://192.168.1.1';
+const DEFAULT_ROUTER_USER = process.env.ROUTER_USERNAME || 'admin';
+const DEFAULT_ROUTER_PASS_RAW = process.env.ROUTER_PASSWORD || '';
 
 interface MacRule {
   remark: string;
@@ -37,7 +40,7 @@ function isValidMacAddress(mac: string): boolean {
   return /^[0-9a-fA-F]{12}$/.test(normalized);
 }
 
-async function routerPost(body: any, sessionId: string = ''): Promise<any> {
+async function routerPost(routerUrl: string, body: any, sessionId: string = ''): Promise<any> {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json; charset=UTF-8',
     };
@@ -47,7 +50,7 @@ async function routerPost(body: any, sessionId: string = ''): Promise<any> {
     }
 
     const timestamp = Date.now();
-    const url = `${CGI}?_t=${timestamp}`;
+    const cgiUrl = `${routerUrl}/cgi-bin/http.cgi?_t=${timestamp}`;
     
     const finalBody = {
         ...body,
@@ -56,7 +59,7 @@ async function routerPost(body: any, sessionId: string = ''): Promise<any> {
         language: body.language || 'EN'
     };
 
-    const res = await fetch(url, {
+    const res = await fetch(cgiUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(finalBody),
@@ -64,14 +67,14 @@ async function routerPost(body: any, sessionId: string = ''): Promise<any> {
     const text = await res.text();
 
     if (!res.ok) {
-        console.error(`[RouterSync] HTTP ${res.status} from ${url}. Body: ${text}`);
+        console.error(`[RouterSync] HTTP ${res.status} from ${cgiUrl}. Body: ${text}`);
         throw new Error(`[RouterSync] HTTP error ${res.status} from router.`);
     }
 
     try {
         return JSON.parse(text);
     } catch {
-        console.warn(`[RouterSync] Non-JSON response from ${url}: ${text.substring(0, 500)}`);
+        console.warn(`[RouterSync] Non-JSON response from ${cgiUrl}: ${text.substring(0, 500)}`);
         return { raw: text };
     }
 }
@@ -80,75 +83,78 @@ async function routerPost(body: any, sessionId: string = ''): Promise<any> {
  * Utility to synchronize user status with the Airtel 5G Router's MAC filtering rules.
  */
 export class RouterSync {
-  private static cachedSessionId: string | null = null;
-  private static loginVariantIndex: number | null = null;
-  private static lastLoginAttemptTime: number = 0;
-  private static loginPromise: Promise<string> | null = null;
+  private static sessions = new Map<string, { sessionId: string; variantIndex: number | null }>();
+  private static loginPromises = new Map<string, Promise<string>>();
+  private static lastLoginAttemptTimes = new Map<string, number>();
 
-  /**
-   * Main entry point to get an authenticated session, handles caching.
-   */
-  private static async ensureLoggedIn(): Promise<string> {
-    if (this.cachedSessionId) {
-      return this.cachedSessionId;
+  private static async ensureLoggedIn(config: RouterConfig): Promise<string> {
+    const key = config.routerUrl;
+    const session = this.sessions.get(key);
+    if (session?.sessionId) {
+      return session.sessionId;
     }
 
-    if (this.loginPromise) {
-      return this.loginPromise;
+    const existingPromise = this.loginPromises.get(key);
+    if (existingPromise) {
+      return existingPromise;
     }
 
-    this.loginPromise = (async () => {
+    const loginPromise = (async () => {
       try {
         const now = Date.now();
-        if (now - this.lastLoginAttemptTime < 5000) {
-          console.warn(`[RouterSync] Login requested too soon. Waiting...`);
+        const lastAttempt = this.lastLoginAttemptTimes.get(key) || 0;
+        if (now - lastAttempt < 5000) {
+          console.warn(`[RouterSync] Login for ${key} requested too soon. Waiting...`);
           await new Promise(r => setTimeout(r, 2000));
         }
 
-        this.lastLoginAttemptTime = Date.now();
-        const sid = await this.login();
-        this.cachedSessionId = sid;
+        this.lastLoginAttemptTimes.set(key, Date.now());
+        const sid = await this.login(config);
+        const currentSession = this.sessions.get(key) || { sessionId: '', variantIndex: null };
+        this.sessions.set(key, { ...currentSession, sessionId: sid });
         return sid;
       } finally {
-        this.loginPromise = null;
+        this.loginPromises.delete(key);
       }
     })();
 
-    return this.loginPromise;
+    this.loginPromises.set(key, loginPromise);
+    return loginPromise;
   }
 
-  /**
-   * Step 2: Log in and return the authenticated session ID.
-   */
-  private static async login(): Promise<string> {
-    const rawPass = process.env.ROUTER_PASSWORD || '';
-    const user = process.env.ROUTER_USERNAME || 'admin';
+  private static async login(config: RouterConfig): Promise<string> {
+    const rawPass = config.routerPasswordRaw || DEFAULT_ROUTER_PASS_RAW;
+    const user = config.routerUsername || DEFAULT_ROUTER_USER;
     const pass = normalizeRouterPassword(rawPass);
 
-    console.log(`[RouterSync] Starting login discovery...`);
+    console.log(`[RouterSync] Starting login discovery for ${config.routerUrl}...`);
     
-    const bootstrapToken = await this.getSessionToken();
+    const bootstrapToken = await this.getSessionToken(config.routerUrl);
     const variants = this.buildLoginVariants(bootstrapToken, user, pass, rawPass);
     
-    // Prioritize working variant
+    const sessionInfo = this.sessions.get(config.routerUrl);
     const sortedIndices = Array.from(variants.keys());
-    if (this.loginVariantIndex !== null && this.loginVariantIndex < variants.length) {
-      sortedIndices.splice(sortedIndices.indexOf(this.loginVariantIndex), 1);
-      sortedIndices.unshift(this.loginVariantIndex);
+    const prevIndex = sessionInfo?.variantIndex;
+    if (typeof prevIndex === 'number' && prevIndex >= 0 && prevIndex < variants.length) {
+      const pos = sortedIndices.indexOf(prevIndex);
+      if (pos > -1) {
+        sortedIndices.splice(pos, 1);
+        sortedIndices.unshift(prevIndex);
+      }
     }
 
     for (const idx of sortedIndices) {
       const variant = variants[idx];
-      const sessionId = await this.tryVariant(variant);
+      const sessionId = await this.tryVariant(config.routerUrl, variant);
       
       if (sessionId) {
-        console.log(`[RouterSync] Successfully logged in using "${variant.name}"`);
-        this.loginVariantIndex = idx;
+        console.log(`[RouterSync] Successfully logged in to ${config.routerUrl} using "${variant.name}"`);
+        this.sessions.set(config.routerUrl, { sessionId, variantIndex: idx });
         return sessionId;
       }
     }
 
-    throw new Error('Router login failed for all variants. Check credentials in .env');
+    throw new Error(`Router login failed for ${config.routerUrl}. Check credentials.`);
   }
 
   private static buildLoginVariants(token: string, user: string, pass: string, rawPass: string) {
@@ -186,13 +192,12 @@ export class RouterSync {
     return variants;
   }
 
-  private static async tryVariant(variant: { name: string; body: any }) {
-    console.log(`[RouterSync] Trying variant: ${variant.name}`);
+  private static async tryVariant(routerUrl: string, variant: { name: string; body: any }) {
     const loginSessionId = generateSessionId();
     const bodyWithSession = { ...variant.body, sessionId: loginSessionId };
     
     try {
-      const data = await routerPost(bodyWithSession, loginSessionId);
+      const data = await routerPost(routerUrl, bodyWithSession, loginSessionId);
       if (data && (data.success === true || data.success === 'true')) {
         if (data.login_fail === 'fail' || data.login_fail2 === 'fail') {
           return null;
@@ -200,38 +205,38 @@ export class RouterSync {
         return data.sessionId || loginSessionId;
       }
     } catch (e) {
-      console.error(`[RouterSync] Variant attempt error:`, e);
+      console.error(`[RouterSync] Variant attempt error for ${routerUrl}:`, e);
     }
     return null;
   }
 
-  private static async getSessionToken(): Promise<string> {
+  private static async getSessionToken(routerUrl: string): Promise<string> {
     for (const cmd of [233, 232]) {
       try {
-        const data = await routerPost({ cmd, method: 'GET' });
+        const data = await routerPost(routerUrl, { cmd, method: 'GET' });
         if (data && data.token) return data.token;
       } catch (e) {}
     }
-    throw new Error('No session token from router');
+    throw new Error(`No session token from router at ${routerUrl}`);
   }
 
-  private static async getMacRules(sessionId: string): Promise<MacRule[]> {
-    const filtersData = await routerPost({ cmd: 23 }, sessionId);
+  private static async getMacRules(routerUrl: string, sessionId: string): Promise<MacRule[]> {
+    const filtersData = await routerPost(routerUrl, { cmd: 23 }, sessionId);
     return filtersData?.datas || [];
   }
 
-  private static async saveMacRules(sessionId: string, rules: MacRule[]): Promise<void> {
-    await routerPost({ cmd: 23, method: 'POST', datas: rules }, sessionId);
-    await routerPost({ cmd: 20 }, sessionId);
+  private static async saveMacRules(routerUrl: string, sessionId: string, rules: MacRule[]): Promise<void> {
+    await routerPost(routerUrl, { cmd: 23, method: 'POST', datas: rules }, sessionId);
+    await routerPost(routerUrl, { cmd: 20 }, sessionId);
   }
 
-  static async toggleMacRule(macAddress: string, userName: string, enable: boolean): Promise<void> {
+  static async toggleMacRule(config: RouterConfig, macAddress: string, userName: string, enable: boolean): Promise<void> {
     if (!isValidMacAddress(macAddress)) {
       throw new Error(`Invalid MAC address: ${macAddress}`);
     }
 
-    const sessionId = await this.ensureLoggedIn();
-    let rules = await this.getMacRules(sessionId);
+    const sessionId = await this.ensureLoggedIn(config);
+    let rules = await this.getMacRules(config.routerUrl, sessionId);
 
     const normalizedTarget = macAddress.replace(/[:\-\s]/g, '').toLowerCase();
     const ruleIndex = rules.findIndex(
@@ -246,13 +251,13 @@ export class RouterSync {
       rules[ruleIndex].enableRule = enable;
     }
 
-    await this.saveMacRules(sessionId, rules);
+    await this.saveMacRules(config.routerUrl, sessionId, rules);
   }
 
-  public static async getRouterData(cmd: number, sessionId?: string): Promise<any> {
-    const sId = sessionId || await this.ensureLoggedIn();
+  public static async getRouterData(config: RouterConfig, cmd: number, sessionId?: string): Promise<any> {
+    const sId = sessionId || await this.ensureLoggedIn(config);
     try {
-        const data = await routerPost({ cmd }, sId);
+        const data = await routerPost(config.routerUrl, { cmd }, sId);
         
         // Comprehensive check for session expiration or unauthorized access
         const isExpired = data && (
@@ -263,25 +268,25 @@ export class RouterSync {
         );
 
         if (isExpired) {
-            console.warn(`[RouterSync] Session expired or invalid (Cmd: ${cmd}). Re-authenticating...`);
-            this.cachedSessionId = null;
+            console.warn(`[RouterSync] Session expired or invalid for ${config.routerUrl} (Cmd: ${cmd}). Re-authenticating...`);
+            this.sessions.delete(config.routerUrl);
             // Only retry if we haven't already passed an explicit sessionId
             if (!sessionId) {
-                const newSId = await this.ensureLoggedIn();
-                return await routerPost({ cmd }, newSId);
+                const newSId = await this.ensureLoggedIn(config);
+                return await routerPost(config.routerUrl, { cmd }, newSId);
             }
         }
         return data;
     } catch (e) {
-        this.cachedSessionId = null;
+        this.sessions.delete(config.routerUrl);
         throw e;
     }
   }
 
-  public static async getSignalStatus(): Promise<any> {
+  public static async getSignalStatus(config: RouterConfig): Promise<any> {
     try {
       // Command 1018 provides both signal and traffic info in an array called device_info
-      const response = await this.getRouterData(1018);
+      const response = await this.getRouterData(config, 1018);
       if (!response.success || !Array.isArray(response.device_info)) {
         return {
           rsrp: '0',
@@ -316,14 +321,14 @@ export class RouterSync {
         enrch_sinr: latest.sinr_5g || '0'
       };
     } catch (error) {
-      console.error('[RouterSync] Failed to get signal status:', error);
+      console.error(`[RouterSync] Failed to get signal status for ${config.routerUrl}:`, error);
       throw error;
     }
   }
 
-  public static async getConnectedDevices(): Promise<any[]> {
+  public static async getConnectedDevices(config: RouterConfig): Promise<any[]> {
     try {
-      const response = await this.getRouterData(223);
+      const response = await this.getRouterData(config, 223);
       const deviceList = response.dhcp_list_info || response.device_list || response.list || [];
       return deviceList.map((dev: any) => ({
         id: dev.mac,
@@ -333,14 +338,14 @@ export class RouterSync {
         isWhitelisted: false // Will be updated by the controller
       }));
     } catch (error) {
-      console.error('[RouterSync] Failed to get connected devices:', error);
+      console.error(`[RouterSync] Failed to get connected devices for ${config.routerUrl}:`, error);
       return [];
     }
   }
 
-  public static async getTrafficStats(): Promise<any> {
+  public static async getTrafficStats(config: RouterConfig): Promise<any> {
     try {
-      const response = await this.getRouterData(1018);
+      const response = await this.getRouterData(config, 1018);
       if (!response.success || !Array.isArray(response.device_info) || response.device_info.length < 2) {
         return { uploadSpeed: '0', downloadSpeed: '0' };
       }
@@ -389,36 +394,36 @@ export class RouterSync {
         unit: 'Mbps'
       };
     } catch (error) {
-      console.error('[RouterSync] Failed to get traffic stats:', error);
+      console.error(`[RouterSync] Failed to get traffic stats for ${config.routerUrl}:`, error);
       return { uploadSpeed: '0', downloadSpeed: '0' };
     }
   }
   
-  public static async getSystemStatus(): Promise<any> {
+  public static async getSystemStatus(config: RouterConfig): Promise<any> {
     try {
       const [res1018, res120] = await Promise.all([
-        this.getRouterData(1018),
-        this.getRouterData(120).catch(() => ({}))
+        this.getRouterData(config, 1018),
+        this.getRouterData(config, 120).catch(() => ({}))
       ]);
 
       const latest = res1018.device_info?.[res1018.device_info.length - 1] || {};
       
       return {
-        cpu: latest.cpu_usage || '0',
-        memory: latest.mem_usage || '0',
-        uptime: latest.sys_uptime || res120.uptime || '0',
-        wanIp: res120.wan_ip || '---',
-        model: res120.model_name || 'ZLT X17M',
-        firmware: res120.sw_version || '---'
+        cpu: latest.cpu_usage || latest.cpuusage || '0',
+        memory: latest.mem_usage || latest.memusage || '0',
+        uptime: latest.sys_uptime || latest.sys_runtime || res120.runtime || res120.uptime || '0',
+        wanIp: res120.wan_ip || res120.wanip || '---',
+        model: res120.model_name || res120.modelname || 'ZLT X17M',
+        firmware: res120.sw_version || res120.swversion || '---'
       };
     } catch (error) {
-      console.error('[RouterSync] Failed to get system status:', error);
+      console.error(`[RouterSync] Failed to get system status for ${config.routerUrl}:`, error);
       return { cpu: '0', memory: '0', uptime: '0', wanIp: '---' };
     }
   }
 
-  static async syncUser(user: IWifiUser): Promise<void> {
+  static async syncUser(config: RouterConfig, user: IWifiUser): Promise<void> {
     if (!user.macAddress) return;
-    await this.toggleMacRule(user.macAddress, user.name, user.status === 'active');
+    await this.toggleMacRule(config, user.macAddress, user.name, user.status === 'active');
   }
 }

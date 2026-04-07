@@ -72,7 +72,6 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
     if (!socket) return;
 
     socket.on('router_status', (data: RouterStatus) => {
-      // Only update if it's a successful fetch to avoid UI "flicker" on transient errors
       if (data && data.success) {
         setRouterStatus(data);
       }
@@ -90,10 +89,34 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
 
   const isUserActive = (u: WifiUser) => new Date(u.paymentExpiryDate).getTime() > now;
 
-  const formatUptime = (seconds: string) => {
-    const s = parseInt(seconds) || 0;
+  const formatUptime = (val: any) => {
+    if (val === undefined || val === null) return '---';
+    
+    const uptimeStr = String(val).trim();
+    if (uptimeStr === '0' || uptimeStr === '' || uptimeStr === '---') return '---';
+    
+    // Handle HH:MM:SS format
+    if (uptimeStr.includes(':')) {
+      const parts = uptimeStr.split(':');
+      if (parts.length >= 2) {
+        const h = parts[0].padStart(1, '0');
+        const m = parts[1].padStart(2, '0');
+        return `${h}h ${m}m`;
+      }
+    }
+
+    // Handle numeric seconds
+    const s = parseInt(uptimeStr);
+    if (isNaN(s) || s <= 0) return '---';
+    
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
+    
+    if (h > 24) {
+      const d = Math.floor(h / 24);
+      const rh = h % 24;
+      return `${d}d ${rh}h`;
+    }
     return `${h}h ${m}m`;
   };
 
@@ -116,25 +139,25 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
                 </span>
             </div>
           </div>
-          <h2 className="hidden md:block text-3xl font-black text-white">System <span className="text-indigo-500">Overview</span></h2>
-          <p className="hidden md:block text-slate-400 text-sm mt-0.5">Instant hardware telemetry and client management.</p>
+          <h2 className="text-3xl font-black text-[var(--text-1)]">System <span className="text-indigo-500">Overview</span></h2>
+          <p className="text-[var(--text-3)] text-sm mt-0.5">Instant hardware telemetry and client management.</p>
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="flex bg-slate-800/30 glass rounded-xl px-4 py-2 border border-white/5">
-             <div className="flex flex-col items-center border-r border-white/10 pr-4 mr-4">
-                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Status</span>
+          <div className="flex bg-[var(--bg-card-alt)] glass rounded-xl px-4 py-2 border border-[var(--border)] shadow-sm">
+             <div className="flex flex-col items-center border-r border-[var(--border)] pr-4 mr-4">
+                <span className="text-[8px] font-bold text-[var(--text-3)] uppercase tracking-tighter">Status</span>
                 <span className={`text-[10px] font-black uppercase ${isConnected ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`}>
                     {isConnected ? 'Online' : 'Linking'}
                 </span>
              </div>
              <div className="flex flex-col items-end">
-                <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">Uptime</span>
-                <span className="text-[10px] font-black text-white">{formatUptime(routerStatus?.system.uptime || '0')}</span>
+                <span className="text-[8px] font-bold text-[var(--text-3)] uppercase tracking-tighter">Runtime</span>
+                <span className="text-[10px] font-black text-[var(--text-1)]">{formatUptime(routerStatus?.system.uptime)}</span>
              </div>
           </div>
           
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-800/50 glass rounded-xl border border-white/5 text-xs font-black uppercase text-indigo-400 tracking-widest">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-[var(--bg-card-alt)] glass rounded-xl border border-[var(--border)] text-xs font-black uppercase text-indigo-400 tracking-widest shadow-sm">
             <RefreshCcw size={14} className={isConnected ? "animate-spin-slow" : ""} />
             Auto-Sync
           </div>
@@ -149,14 +172,14 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
            { label: 'Signal Strength', value: routerStatus ? `${routerStatus.signal.rsrp} dBm` : null, icon: <Signal size={18}/>, color: 'emerald' },
            { label: 'System CPU', value: routerStatus ? `${routerStatus.system.cpu}%` : null, icon: <Cpu size={18}/>, color: 'amber' },
          ].map(stat => (
-           <div key={stat.label} className="glass rounded-2xl p-5 border-white/5 group hover:border-white/10 transition-all">
+           <div key={stat.label} className="bg-[var(--bg-card)] rounded-2xl p-5 border border-[var(--border)] group hover:border-indigo-500/20 transition-all shadow-sm">
               <div className={`p-2 rounded-xl bg-${stat.color}-500/10 text-${stat.color}-400 w-fit mb-3`}>{stat.icon}</div>
               {stat.value !== null ? (
-                <p className="text-2xl font-black text-white">{stat.value}</p>
+                <p className="text-2xl font-black text-[var(--text-1)]">{stat.value}</p>
               ) : (
                 <Skeleton width="60%" height={28} className="mb-1" />
               )}
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-0.5">{stat.label}</p>
+              <p className="text-[10px] font-black text-[var(--text-3)] uppercase tracking-widest mt-0.5">{stat.label}</p>
            </div>
          ))}
       </div>
@@ -164,16 +187,16 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         
         {/* INTERNET SPEED (Mbps UNIT) */}
-        <div className="lg:col-span-3 glass rounded-2xl p-6 shadow-xl relative overflow-hidden group border-emerald-500/10 bg-gradient-to-br from-slate-900/40 to-transparent">
+        <div className="lg:col-span-3 bg-[var(--bg-card)] rounded-2xl p-6 shadow-sm relative overflow-hidden group border border-[var(--border)]">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
               <Activity size={20} />
             </div>
-            <h3 className="text-[11px] font-black text-white uppercase tracking-widest">Internet Speed</h3>
+            <h3 className="text-[11px] font-black text-[var(--text-1)] uppercase tracking-widest">Internet Speed</h3>
           </div>
           
-          <div className="space-y-6">
-            <div>
+          <div className="flex flex-row lg:flex-col gap-6 lg:gap-8 lg:space-y-6">
+            <div className="flex-1">
               <div className="flex items-center gap-2 mb-1.5 text-emerald-400 font-black text-[9px] uppercase tracking-widest opacity-60">
                 <ArrowDownCircle size={14} />
                 <span>Download</span>
@@ -181,17 +204,16 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
               <div className="flex items-baseline gap-2">
                 {!isSyncing ? (
                   <>
-                    <span className="text-3xl font-black text-white tracking-tighter">{routerStatus.traffic.downloadSpeed}</span>
-                    <span className="text-[11px] font-black text-emerald-400 uppercase">{routerStatus.traffic.unit || 'Mbps'}</span>
+                    <span className="text-2xl md:text-3xl font-black text-[var(--text-1)] tracking-tighter">{routerStatus.traffic.downloadSpeed}</span>
+                    <span className="text-[10px] md:text-[11px] font-black text-emerald-500 uppercase">{routerStatus.traffic.unit || 'Mbps'}</span>
                   </>
                 ) : (
                   <Skeleton width="80%" height={36} />
                 )}
               </div>
-              <p className="text-[8px] text-slate-500 font-black uppercase mt-1 tracking-tighter">Matches Speed Test Unit</p>
             </div>
 
-            <div>
+            <div className="flex-1">
               <div className="flex items-center gap-2 mb-1.5 text-indigo-400 font-black text-[9px] uppercase tracking-widest opacity-60">
                 <ArrowUpCircle size={14} />
                 <span>Upload</span>
@@ -199,8 +221,8 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
               <div className="flex items-baseline gap-2">
                 {!isSyncing ? (
                   <>
-                    <span className="text-3xl font-black text-white tracking-tighter">{routerStatus.traffic.uploadSpeed}</span>
-                    <span className="text-[11px] font-black text-indigo-400 uppercase">{routerStatus.traffic.unit || 'Mbps'}</span>
+                    <span className="text-2xl md:text-3xl font-black text-[var(--text-1)] tracking-tighter">{routerStatus.traffic.uploadSpeed}</span>
+                    <span className="text-[10px] md:text-[11px] font-black text-indigo-400 uppercase">{routerStatus.traffic.unit || 'Mbps'}</span>
                   </>
                 ) : (
                   <Skeleton width="80%" height={36} />
@@ -208,16 +230,17 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
               </div>
             </div>
           </div>
+          <p className="text-[8px] text-[var(--text-4)] font-black uppercase mt-4 tracking-tighter">Matches Speed Test Unit</p>
         </div>
 
         {/* ONLINE DEVICES TABLE */}
-        <div className="lg:col-span-9 glass rounded-2xl p-6 shadow-xl overflow-hidden border-white/5">
+        <div className="lg:col-span-9 bg-[var(--bg-card)] rounded-2xl p-6 shadow-sm overflow-hidden border border-[var(--border)]">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
                 <Smartphone size={20} />
               </div>
-              <h3 className="text-[11px] font-black text-white uppercase tracking-widest">Online Devices</h3>
+              <h3 className="text-[11px] font-black text-[var(--text-1)] uppercase tracking-widest">Online Devices</h3>
             </div>
             <div className="flex items-center gap-2">
                 {connectedDevices.length > 0 ? (
@@ -230,7 +253,7 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
           
           <div className="overflow-x-auto min-h-[180px]">
              <table className="w-full text-left text-xs">
-                <thead className="text-slate-500 font-black uppercase tracking-widest border-b border-white/5">
+                <thead className="text-[var(--text-3)] font-black uppercase tracking-widest border-b border-[var(--border)] bg-[var(--bg-app)]/30">
                     <tr>
                         <th className="pb-4 px-2">Device Name</th>
                         <th className="pb-4 px-2">IP Address</th>
@@ -238,7 +261,7 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
                         <th className="pb-4 px-2 text-right">Access</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-[var(--border)]">
                     {!isConnected && connectedDevices.length === 0 ? (
                         Array.from({ length: 4 }).map((_, i) => (
                            <tr key={i}>
@@ -250,7 +273,7 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
                         ))
                     ) : connectedDevices.length === 0 ? (
                         <tr>
-                            <td colSpan={4} className="py-10 text-center text-slate-600 font-black uppercase tracking-widest opacity-30">
+                            <td colSpan={4} className="py-10 text-center text-[var(--text-4)] font-black uppercase tracking-widest opacity-30">
                                 No devices found on network
                             </td>
                         </tr>
@@ -260,21 +283,21 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
                             const isRegistered = registeredUser && isUserActive(registeredUser);
                             
                             return (
-                                <tr key={device.mac} className="group hover:bg-white/5 transition-all">
+                                <tr key={device.mac} className="group hover:bg-[var(--hover-bg)] transition-all">
                                     <td className="py-3 px-2">
                                         <div className="flex items-center gap-2">
-                                            <div className={`p-1.5 rounded bg-slate-800 ${isRegistered ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                            <div className={`p-1.5 rounded bg-[var(--bg-app)] ${isRegistered ? 'text-emerald-400' : 'text-slate-400'}`}>
                                                 <Server size={10} />
                                             </div>
-                                            <span className="font-black text-slate-200 truncate max-w-[120px]">{device.name}</span>
+                                            <span className="font-black text-[var(--text-2)] truncate max-w-[120px]">{device.name}</span>
                                         </div>
                                     </td>
-                                    <td className="py-3 px-2 font-mono text-slate-400">{device.ip}</td>
-                                    <td className="py-3 px-2 font-mono text-slate-500 uppercase">{device.mac}</td>
+                                    <td className="py-3 px-2 font-mono text-[var(--text-3)]">{device.ip}</td>
+                                    <td className="py-3 px-2 font-mono text-[var(--text-4)] uppercase">{device.mac}</td>
                                     <td className="py-3 px-2 text-right">
                                         <div className="flex items-center justify-end gap-1.5">
                                             <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                                                isRegistered ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                                                isRegistered ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
                                             }`}>
                                                 {isRegistered ? 'Authorized' : 'Guest'}
                                             </span>
@@ -294,51 +317,57 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
 
       {/* HARDWARE DETAILS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Performance Gauges */}
-          <div className="glass rounded-2xl p-5 border-white/5">
-            <div className="flex items-center gap-3 mb-6">
+          {/* Performance Monitoring */}
+          <div className="bg-[var(--bg-card)] rounded-2xl p-6 border border-[var(--border)] shadow-sm">
+            <div className="flex items-center gap-3 mb-8">
                 <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
                     <Cpu size={18} />
                 </div>
-                <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Performance</h3>
+                <h3 className="text-[10px] font-black text-[var(--text-1)] uppercase tracking-widest">Hardware Performance</h3>
             </div>
-            <div className="grid grid-cols-2 gap-8 items-center h-full">
-                <div className="relative h-24 w-24 mx-auto">
-                    <svg className="w-full h-full transform -rotate-90">
-                        <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-slate-800" />
-                        <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" 
-                        strokeDasharray={251} 
-                        strokeDashoffset={251 - (251 * parseInt(routerStatus?.system.cpu || '0')) / 100}
-                        className="text-indigo-500 transition-all duration-1000" 
-                        strokeLinecap="round"
-                        />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-xl font-black text-white">{routerStatus?.system.cpu || '0'}%</span>
-                        <span className="text-[7px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">CPU Load</span>
-                    </div>
+            
+            <div className="space-y-8">
+                {/* CPU Gauge */}
+                <div>
+                   <div className="flex justify-between items-end mb-2">
+                      <span className="text-[9px] font-black text-[var(--text-3)] uppercase tracking-widest">CPU LOAD</span>
+                      <span className={`text-xs font-black ${parseInt(routerStatus?.system.cpu || '0') > 80 ? 'text-rose-500' : 'text-indigo-400'}`}>
+                        {routerStatus?.system.cpu || '0'}%
+                      </span>
+                   </div>
+                   <div className="w-full h-2 bg-[var(--bg-app)] rounded-full overflow-hidden border border-[var(--border)]">
+                      <div 
+                        className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-1000 ease-out"
+                        style={{ width: `${routerStatus?.system.cpu || 0}%` }}
+                      ></div>
+                   </div>
                 </div>
-                <div className="space-y-4">
-                    <div>
-                        <div className="flex justify-between text-[8px] font-black text-slate-500 uppercase mb-1">
-                            <span>Memory Usage</span>
-                            <span>{routerStatus?.system.memory || '0'}%</span>
-                        </div>
-                        <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-indigo-400 h-full rounded-full" style={{ width: `${routerStatus?.system.memory || 0}%` }}></div>
-                        </div>
-                    </div>
+
+                {/* Memory Gauge */}
+                <div>
+                   <div className="flex justify-between items-end mb-2">
+                      <span className="text-[9px] font-black text-[var(--text-3)] uppercase tracking-widest">MEMORY USAGE</span>
+                      <span className="text-xs font-black text-emerald-500">
+                        {routerStatus?.system.memory || '0'}%
+                      </span>
+                   </div>
+                   <div className="w-full h-2 bg-[var(--bg-app)] rounded-full overflow-hidden border border-[var(--border)]">
+                      <div 
+                        className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-1000 ease-out"
+                        style={{ width: `${routerStatus?.system.memory || 0}%` }}
+                      ></div>
+                   </div>
                 </div>
             </div>
           </div>
 
           {/* Router Specs */}
-          <div className="glass rounded-2xl p-5 border-white/5 bg-gradient-to-br from-slate-900/50 to-indigo-900/5">
+          <div className="bg-[var(--bg-card)] rounded-2xl p-5 border border-[var(--border)] shadow-sm">
             <div className="flex items-center gap-3 mb-6">
                 <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
                     <Globe size={18} />
                 </div>
-                <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Router Details</h3>
+                <h3 className="text-[10px] font-black text-[var(--text-1)] uppercase tracking-widest">Router Details</h3>
             </div>
             <div className="grid grid-cols-2 gap-3">
                 {[
@@ -347,12 +376,12 @@ export default function DashboardPage({ users, loading }: DashboardPageProps) {
                 { label: 'Firmware', value: routerStatus?.system.firmware || '---', icon: <Database size={10} /> },
                 { label: 'Hardware', value: 'ZLT X17M', icon: <Radio size={10} /> },
                 ].map(item => (
-                <div key={item.label} className="p-3 rounded-xl bg-slate-900/60 border border-white/5 hover:bg-slate-800/80 transition-all">
+                <div key={item.label} className="p-3 rounded-xl bg-[var(--bg-app)]/50 border border-[var(--border)] hover:bg-[var(--hover-bg)] transition-all">
                     <div className="flex items-center justify-between opacity-30 mb-1.5">
-                        <span className="text-[7px] font-black uppercase tracking-widest">{item.label}</span>
+                        <span className="text-[7px] font-black text-[var(--text-3)] uppercase tracking-widest">{item.label}</span>
                         {item.icon}
                     </div>
-                    <span className="text-[9px] font-black text-slate-200 uppercase tracking-widest truncate block">{item.value}</span>
+                    <span className="text-[9px] font-black text-[var(--text-2)] uppercase tracking-widest truncate block">{item.value}</span>
                 </div>
                 ))}
             </div>

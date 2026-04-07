@@ -10,6 +10,8 @@ import AddUserPage from './pages/AddUserPage';
 import ReportsPage from './pages/ReportsPage';
 import UsersPage from './pages/UsersPage';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import SettingsPage from './pages/SettingsPage';
 import ConfirmModal from './components/ConfirmModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
@@ -122,11 +124,13 @@ function AppContent() {
       <div className="relative z-10">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<DashboardPage users={users} loading={loading} />} />
             <Route path="users" element={<UsersPage users={users} loading={loading} onDelete={handleDeleteClick} onUpdate={handleUserUpdate} onUserAdded={handleUserAdded} />} />
             <Route path="reports" element={<ReportsPage users={users} loading={loading} />} />
             <Route path="add-user" element={<AddUserPage onUserAdded={handleUserAdded} />} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -34,26 +34,10 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
-const WifiUserSchema = new mongoose_1.Schema({
-    name: { type: String, required: true, trim: true },
-    macAddress: { type: String, required: true, uppercase: true, trim: true },
-    paymentExpiryDate: { type: Date, required: true },
-    amountPaid: { type: Number, required: true },
-    methodPaid: { type: String, required: true },
-    status: {
-        type: String,
-        enum: ['active', 'expired'],
-        default: 'active'
-    },
-    adminId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
-        index: true // Indexed for fast lookups by admin
-    },
-}, {
-    timestamps: true
-});
-// Compound index to ensure uniqueness of MAC across a single admin's pool
-WifiUserSchema.index({ macAddress: 1, adminId: 1 }, { unique: true });
-exports.default = mongoose_1.default.model('WifiUser', WifiUserSchema);
+const AuditLogSchema = new mongoose_1.Schema({
+    action: { type: String, required: true },
+    target: { type: String, required: true },
+    performedBy: { type: String, required: true },
+    details: { type: String },
+}, { timestamps: true });
+exports.default = mongoose_1.default.model('AuditLog', AuditLogSchema);

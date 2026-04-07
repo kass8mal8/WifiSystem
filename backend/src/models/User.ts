@@ -2,15 +2,23 @@ import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 export interface IUser extends Document {
-  username: string;
+  name: string;
+  email: string;
   password: string;
+  routerUrl?: string;
+  routerUsername?: string;
+  routerPassword?: string;
   comparePassword(password: string): Promise<boolean>;
 }
 
 const UserSchema: Schema = new Schema(
   {
-    username: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
+    routerUrl: { type: String, default: 'http://192.168.1.1' },
+    routerUsername: { type: String, default: 'admin' },
+    routerPassword: { type: String, default: '' },
   },
   { timestamps: true }
 );
