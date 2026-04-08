@@ -43,7 +43,6 @@ export interface WifiUser {
   macAddress: string;
   paymentExpiryDate: string;
   amountPaid: number;
-  methodPaid: string;
   status: 'active' | 'expired';
   createdAt: string;
   routerSync?: {
@@ -51,6 +50,21 @@ export interface WifiUser {
     message?: string;
   };
 }
+
+export interface Payment {
+  _id: string;
+  amount: number;
+  method: string;
+  wifiUserId: string;
+  wifiUserName: string;
+  adminId: string;
+  createdAt: string;
+}
+
+export const fetchPayments = async (): Promise<Payment[]> => {
+  const response = await api.get('/users/payments');
+  return response.data;
+};
 
 export const fetchUsers = async (): Promise<WifiUser[]> => {
   const response = await api.get('/users');

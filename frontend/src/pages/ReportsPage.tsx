@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import type { WifiUser } from '../api';
+import { useState, useMemo, useEffect } from 'react';
+import { fetchPayments } from '../api';
+import type { Payment, WifiUser } from '../api';
 import {
   TrendingUp,
   BarChart3,
@@ -38,16 +39,36 @@ type Timeframe = 'daily' | 'weekly' | 'monthly';
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e'];
 
-export default function ReportsPage({ users, loading }: ReportsPageProps) {
+export default function ReportsPage({ users, loading: usersLoading }: ReportsPageProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>('daily');
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
   const now = Date.now();
+
+  const loading = usersLoading || paymentsLoading;
+
+  useEffect(() => {
+    const loadPayments = async () => {
+      try {
+        const data = await fetchPayments();
+        setPayments(data);
+      } catch (error) {
+        console.error('Failed to fetch payments:', error);
+      } finally {
+        setPaymentsLoading(false);
+      }
+    };
+    loadPayments();
+  }, []);
 
   const isActive = (u: WifiUser) => new Date(u.paymentExpiryDate).getTime() > now;
 
   const chartData = useMemo(() => {
     const data: Record<string, { name: string; revenue: number; users: number; sortKey: string }> = {};
-    users.forEach(user => {
-      const date = new Date(user.createdAt || Date.now());
+    
+    // Process payments for revenue
+    payments.forEach(payment => {
+      const date = new Date(payment.createdAt);
       let key = '', label = '', sortKey = '';
       if (timeframe === 'daily') {
         key = date.toISOString().split('T')[0];
@@ -65,16 +86,98 @@ export default function ReportsPage({ users, loading }: ReportsPageProps) {
         sortKey = key;
       }
       if (!data[key]) data[key] = { name: label, revenue: 0, users: 0, sortKey };
-      data[key].revenue += parseFloat(user.amountPaid.toString());
-      data[key].users += 1;
+      data[key].revenue += parseFloat(payment.amount.toString());
     });
-    return Object.values(data).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  }, [users, timeframe]);
 
-  const totalRevenue = users.reduce((s, u) => s + parseFloat(u.amountPaid.toString()), 0);
+    // Process new users for user count
+    users.forEach(user => {
+      const date = new Date(user.createdAt || Date.now());
+      let key = '';
+      if (timeframe === 'daily') {
+        key = date.toISOString().split('T')[0];
+      } else if (timeframe === 'weekly') {
+        const d = new Date(date);
+        d.setDate(d.getDate() - d.getDay());
+        key = d.toISOString().split('T')[0];
+      } else {
+        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      }
+      if (data[key]) {
+        data[key].users += 1;
+      } else {
+        // Fallback or handle dates where there were users but no payments recorded yet
+        // (though in this system, every user creation should have a payment)
+      }
+    });
+
+    return Object.values(data).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, [payments, users, timeframe]);
+
+  // Dynamic Metrics Calculation
+  const metrics = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay());
+    
+    const lastWeekStart = new Date(weekStart);
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+
+    let currentRevenue = 0;
+    let previousRevenue = 0;
+    let currentNewUsers = 0;
+    let previousNewUsers = 0;
+
+    const isCurrent = (date: Date) => {
+      if (timeframe === 'daily') return date >= today;
+      if (timeframe === 'weekly') return date >= weekStart;
+      return date >= monthStart; // monthly
+    };
+
+    const isPrevious = (date: Date) => {
+      if (timeframe === 'daily') return date >= yesterday && date < today;
+      if (timeframe === 'weekly') return date >= lastWeekStart && date < weekStart;
+      return date >= lastMonthStart && date < monthStart;
+    };
+
+    payments.forEach(p => {
+      const d = new Date(p.createdAt);
+      const amt = parseFloat(p.amount.toString());
+      if (isCurrent(d)) currentRevenue += amt;
+      else if (isPrevious(d)) previousRevenue += amt;
+    });
+
+    users.forEach(u => {
+      const d = new Date(u.createdAt || Date.now());
+      if (isCurrent(d)) currentNewUsers += 1;
+      else if (isPrevious(d)) previousNewUsers += 1;
+    });
+
+    const getChange = (curr: number, prev: number) => {
+      if (prev === 0) return curr > 0 ? 100 : 0;
+      return Math.round(((curr - prev) / prev) * 100);
+    };
+
+    return {
+      totalRevenue: currentRevenue,
+      revenueChange: getChange(currentRevenue, previousRevenue),
+      newUsers: currentNewUsers,
+      userChange: getChange(currentNewUsers, previousNewUsers),
+      periodLabel: timeframe === 'daily' ? 'Today' : timeframe === 'weekly' ? 'This Week' : 'This Month'
+    };
+  }, [payments, users, timeframe]);
+
+  const totalRevenue = metrics.totalRevenue;
   const activeCount = users.filter(u => isActive(u)).length;
   const expiredCount = users.filter(u => !isActive(u)).length;
-  const avgRevenue = users.length ? (totalRevenue / users.length).toFixed(0) : '0';
+  const avgRevenue = users.length ? (payments.reduce((s, p) => s + parseFloat(p.amount.toString()), 0) / users.length).toFixed(0) : '0';
   
   const expiringSoon = users.filter(
     u => isActive(u) && new Date(u.paymentExpiryDate).getTime() < now + 3 * 24 * 60 * 60 * 1000
@@ -82,19 +185,19 @@ export default function ReportsPage({ users, loading }: ReportsPageProps) {
 
   const methodData = useMemo(() => {
     const m: Record<string, number> = {};
-    users.forEach(u => { m[u.methodPaid] = (m[u.methodPaid] || 0) + 1; });
+    payments.forEach(p => { m[p.method] = (m[p.method] || 0) + 1; });
     return Object.entries(m).map(([name, value]) => ({ name, value }));
-  }, [users]);
+  }, [payments]);
 
   const durationData = useMemo(() => {
     const d: Record<string, { revenue: number; count: number }> = { Cash: { revenue: 0, count: 0 }, MPesa: { revenue: 0, count: 0 } };
-    users.forEach(u => {
-      const key = u.methodPaid in d ? u.methodPaid : 'Cash';
-      d[key].revenue += parseFloat(u.amountPaid.toString());
+    payments.forEach(p => {
+      const key = p.method in d ? p.method : 'Cash';
+      d[key].revenue += parseFloat(p.amount.toString());
       d[key].count += 1;
     });
     return Object.entries(d).map(([name, v]) => ({ name, ...v, avg: v.count ? +(v.revenue / v.count).toFixed(0) : 0 }));
-  }, [users]);
+  }, [payments]);
 
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-700 pb-10">
@@ -131,19 +234,25 @@ export default function ReportsPage({ users, loading }: ReportsPageProps) {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         {[
-          { label: 'Total Revenue', value: `Ksh ${totalRevenue.toLocaleString()}`, icon: <DollarSign size={16}/>, color: 'indigo', sub: 'Total Earned' },
-          { label: 'Active Users', value: activeCount, icon: <CheckCircle size={16}/>, color: 'emerald', sub: 'Currently Paid' },
-          { label: 'Expired Users', value: expiredCount, icon: <XCircle size={16}/>, color: 'rose', sub: 'Action Required' },
-          { label: 'Expiring Soon', value: expiringSoon, icon: <Target size={16}/>, color: 'amber', sub: 'Next 3 Days' },
-        ].map(card => (
+      { label: 'Revenue', value: `Ksh ${totalRevenue.toLocaleString()}`, icon: <DollarSign size={16}/>, color: 'indigo', sub: metrics.periodLabel, change: metrics.revenueChange },
+      { label: 'New Users', value: metrics.newUsers, icon: <TrendingUp size={16}/>, color: 'emerald', sub: metrics.periodLabel, change: metrics.userChange },
+      { label: 'Active Status', value: activeCount, icon: <CheckCircle size={16}/>, color: 'emerald', sub: 'Total Active' },
+      { label: 'Expiring Soon', value: expiringSoon, icon: <Target size={16}/>, color: 'amber', sub: 'Next 3 Days' },
+    ].map(card => (
           <div key={card.label} className={`bg-[var(--bg-card)] backdrop-blur-xl rounded-[1.25rem] p-4 lg:p-5 border border-[var(--border)] group hover:border-${card.color}-500/30 transition-all duration-300 relative overflow-hidden shadow-sm`}>
             <div className={`inline-flex p-2 rounded-xl bg-${card.color}-500/10 text-${card.color}-400 mb-3 shadow-inner border border-${card.color}-500/10 transition-transform group-hover:scale-110 duration-300`}>{card.icon}</div>
             <div>
               {loading ? <Skeleton width="80%" height={24} className="rounded-lg mb-1" /> : <p className="text-xl md:text-2xl font-black text-[var(--text-1)] tracking-tighter drop-shadow-sm leading-tight">{card.value}</p>}
               <p className={`text-[9px] font-black text-${card.color}-500 uppercase tracking-widest mt-0.5`}>{card.label}</p>
-              <div className="flex items-center gap-1 mt-2.5 opacity-60">
-                 <ArrowUpRight size={10} className="text-[var(--text-3)]" />
-                 <span className="text-[8px] font-bold text-[var(--text-3)] uppercase tracking-tight">{card.sub}</span>
+              <div className="flex items-center gap-1.5 mt-2.5">
+                 {card.change !== undefined ? (
+                   <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${card.change >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                     {card.change >= 0 ? '+' : ''}{card.change}%
+                   </span>
+                 ) : (
+                   <ArrowUpRight size={10} className="text-[var(--text-3)] opacity-60" />
+                 )}
+                 <span className="text-[8px] font-bold text-[var(--text-3)] uppercase tracking-tight opacity-60">{card.sub}</span>
               </div>
             </div>
             

@@ -1,7 +1,9 @@
+import mongoose from 'mongoose';
 import { Request, Response } from 'express';
 import WifiUser from '../models/WifiUser';
 import AuditLog from '../models/AuditLog';
 import User from '../models/User';
+import Payment from '../models/Payment';
 import { RouterSync, RouterConfig } from '../utils/routerSync';
 
 const getRouterConfig = (admin: any): RouterConfig => ({
@@ -13,7 +15,29 @@ const getRouterConfig = (admin: any): RouterConfig => ({
 export const getUsers = async (req: any, res: Response) => {
   try {
     const adminId = req.user.id;
-    const users = await WifiUser.find({ adminId }).sort({ createdAt: -1 });
+    // Use aggregation to join payments and calculate total amountPaid
+    const users = await WifiUser.aggregate([
+      { $match: { adminId: new mongoose.Types.ObjectId(adminId) } },
+      {
+        $lookup: {
+          from: 'payments', // Note: MongoDB collection names are usually plural/lowercase
+          localField: '_id',
+          foreignField: 'wifiUserId',
+          as: 'payments'
+        }
+      },
+      {
+        $addFields: {
+          amountPaid: { $sum: '$payments.amount' }
+        }
+      },
+      {
+        $project: {
+          payments: 0
+        }
+      },
+      { $sort: { createdAt: -1 } }
+    ]);
     res.status(200).json(users);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -34,16 +58,27 @@ export const createUser = async (req: any, res: Response) => {
     
     const savedUser = await newUser.save();
 
-    // Audit Log
+    // Audit Log & Payment tracking
     try {
       await AuditLog.create({
         action: 'CREATE_USER',
         target: `${savedUser.name} (${savedUser.macAddress})`,
         performedBy: admin.name || admin.email,
-        details: `Initial payment: ${savedUser.amountPaid} via ${savedUser.methodPaid}`,
+        details: `Initial payment: ${req.body.amountPaid} via ${req.body.methodPaid || 'Unknown'}`,
       });
+
+      // Record the initial payment
+      if (req.body.amountPaid) {
+        await Payment.create({
+          amount: parseFloat(req.body.amountPaid),
+          method: req.body.methodPaid || 'Unknown',
+          wifiUserId: savedUser._id,
+          wifiUserName: savedUser.name,
+          adminId
+        });
+      }
     } catch (logError) {
-      console.error('[AuditLog Error]', logError);
+      console.error('[AuditLog/Payment Error]', logError);
     }
 
     let routerSyncWarning: string | null = null;
@@ -113,32 +148,51 @@ export const updateUser = async (req: any, res: Response) => {
   try {
     const adminId = req.user.id;
     const { id } = req.params;
-    const updateData = { ...req.body };
     
     const admin = await User.findById(adminId);
     if (!admin) return res.status(404).json({ message: 'Admin not found' });
 
+    const { amountPaid, methodPaid, ...rest } = req.body;
+    const updateQuery: any = { $set: { ...rest } };
+
     if (req.body.paymentExpiryDate) {
-      updateData.status = 'active';
+      updateQuery.$set.status = 'active';
     }
     
     // Ensure ownership during update
     const updatedUser = await WifiUser.findOneAndUpdate(
       { _id: id, adminId }, 
-      updateData, 
+      updateQuery, 
       { new: true }
     );
 
     let routerSyncWarning: string | null = null;
 
     if (updatedUser) {
+      // Create Payment Record if amount was paid
+      if (amountPaid) {
+        try {
+          await Payment.create({
+            amount: Number(amountPaid),
+            method: methodPaid || 'Unknown',
+            wifiUserId: updatedUser._id,
+            wifiUserName: updatedUser.name,
+            adminId
+          });
+        } catch (payError) {
+          console.error('[Payment Error]', payError);
+        }
+      }
+
       // Audit Log
       try {
         await AuditLog.create({
           action: req.body.paymentExpiryDate ? 'RENEW_SUBSCRIPTION' : 'UPDATE_USER',
           target: `${updatedUser.name} (${updatedUser.macAddress})`,
           performedBy: admin.name || admin.email,
-          details: req.body.paymentExpiryDate ? `Renewed until ${new Date(req.body.paymentExpiryDate).toLocaleDateString()}` : 'User details updated',
+          details: req.body.paymentExpiryDate 
+            ? `Renewed until ${new Date(req.body.paymentExpiryDate).toLocaleDateString()}. Amount: ${amountPaid}` 
+            : 'User details updated',
         });
       } catch (logError) {
         console.error('[AuditLog Error]', logError);
@@ -161,5 +215,15 @@ export const updateUser = async (req: any, res: Response) => {
     });
   } catch (error: any) {
     res.status(400).json({ message: error.message });
+  }
+};
+
+export const getPayments = async (req: any, res: Response) => {
+  try {
+    const adminId = req.user.id;
+    const payments = await Payment.find({ adminId }).sort({ createdAt: -1 });
+    res.status(200).json(payments);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
   }
 };
