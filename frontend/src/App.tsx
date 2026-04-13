@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { fetchUsers, deleteUser, updateUser } from './api';
+import { fetchUsers, revokeUser, updateUser } from './api';
 import type { WifiUser } from './api';
 import { Toaster, toast } from 'react-hot-toast';
 
@@ -47,7 +47,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 function AppContent() {
   const [users, setUsers] = useState<WifiUser[]>([]);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<string | null>(null);
+  const [userToRevoke, setUserToRevoke] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { isAuthenticated } = useAuth();
 
@@ -83,22 +83,22 @@ function AppContent() {
     }
   };
 
-  const handleDeleteClick = (id: string) => {
-    setUserToDelete(id);
+  const handleRevokeClick = (id: string) => {
+    setUserToRevoke(id);
     setIsConfirmOpen(true);
   };
 
-  const confirmDelete = async () => {
-    if (!userToDelete) return;
+  const confirmRevoke = async () => {
+    if (!userToRevoke) return;
     try {
-      await deleteUser(userToDelete);
-      setUsers(users.filter(u => u._id !== userToDelete));
+      const updatedUser = await revokeUser(userToRevoke);
+      setUsers(prev => prev.map(u => u._id === userToRevoke ? updatedUser : u));
       toast.success('User access revoked');
     } catch (error) {
       console.error(error);
-      toast.error('Failed to delete user');
+      toast.error('Failed to revoke user access');
     } finally {
-      setUserToDelete(null);
+      setUserToRevoke(null);
       setIsConfirmOpen(false);
     }
   };
@@ -127,7 +127,7 @@ function AppContent() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<DashboardPage users={users} loading={loading} />} />
-            <Route path="users" element={<UsersPage users={users} loading={loading} onDelete={handleDeleteClick} onUpdate={handleUserUpdate} onUserAdded={handleUserAdded} />} />
+            <Route path="users" element={<UsersPage users={users} loading={loading} onRevoke={handleRevokeClick} onUpdate={handleUserUpdate} onUserAdded={handleUserAdded} />} />
             <Route path="reports" element={<ReportsPage users={users} loading={loading} />} />
             <Route path="add-user" element={<AddUserPage onUserAdded={handleUserAdded} />} />
             <Route path="settings" element={<SettingsPage />} />
@@ -140,7 +140,7 @@ function AppContent() {
         isOpen={isConfirmOpen}
         title="Revoke Access"
         message="Are you sure you want to revoke this user's access? They will be immediately disconnected from the WiFi."
-        onConfirm={confirmDelete}
+        onConfirm={confirmRevoke}
         onClose={() => setIsConfirmOpen(false)}
         confirmText="Confirm"
         type="danger"

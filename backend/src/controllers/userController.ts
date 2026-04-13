@@ -7,9 +7,9 @@ import Payment from '../models/Payment';
 import { RouterSync, RouterConfig } from '../utils/routerSync';
 
 const getRouterConfig = (admin: any): RouterConfig => ({
-  routerUrl: admin.routerUrl || 'http://192.168.1.1',
-  routerUsername: admin.routerUsername || 'admin',
-  routerPasswordRaw: admin.routerPassword || ''
+  routerUrl: admin.routerUrl || process.env.ROUTER_URL || 'http://192.168.1.1',
+  routerUsername: admin.routerUsername || process.env.ROUTER_USERNAME || 'admin',
+  routerPasswordRaw: admin.routerPassword || process.env.ROUTER_PASSWORD || '',
 });
 
 export const getUsers = async (req: any, res: Response) => {
@@ -144,6 +144,56 @@ export const deleteUser = async (req: any, res: Response) => {
   }
 };
 
+export const revokeUser = async (req: any, res: Response) => {
+  try {
+    const adminId = req.user.id;
+    const { id } = req.params;
+    
+    const admin = await User.findById(adminId);
+    if (!admin) return res.status(404).json({ message: 'Admin not found' });
+
+    // Mark as expired in DB
+    const user = await WifiUser.findOneAndUpdate(
+      { _id: id, adminId }, 
+      { $set: { status: 'expired' } },
+      { returnDocument: 'after' }
+    );
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found or unauthorized' });
+    }
+
+    // Audit Log
+    try {
+      await AuditLog.create({
+        action: 'REVOKE_ACCESS',
+        target: `${user.name} (${user.macAddress})`,
+        performedBy: admin.name || admin.email,
+        details: 'Manual access revocation',
+      });
+    } catch (logError) {
+      console.error('[AuditLog Error]', logError);
+    }
+
+    let routerSyncWarning: string | null = null;
+    try {
+      const config = getRouterConfig(admin);
+      await RouterSync.toggleMacRule(config, user.macAddress, user.name, false);
+      console.log(`[Router] Successfully revoked access for ${user.macAddress}`);
+    } catch (routerError: any) {
+      routerSyncWarning = routerError?.message || 'Router sync failed while revoking access.';
+      console.error(`[Router] DB updated to expired, but sync failed for ${user.macAddress}: ${routerSyncWarning}`);
+    }
+
+    res.status(200).json({
+      ...user.toObject(),
+      routerSync: routerSyncWarning ? { success: false, message: routerSyncWarning } : { success: true },
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const updateUser = async (req: any, res: Response) => {
   try {
     const adminId = req.user.id;
@@ -163,7 +213,7 @@ export const updateUser = async (req: any, res: Response) => {
     const updatedUser = await WifiUser.findOneAndUpdate(
       { _id: id, adminId }, 
       updateQuery, 
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     let routerSyncWarning: string | null = null;

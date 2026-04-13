@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getUsers, createUser, deleteUser, updateUser, getPayments } from '../controllers/userController';
+import { getUsers, createUser, deleteUser, updateUser, getPayments, revokeUser } from '../controllers/userController';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
@@ -9,6 +9,7 @@ router.get('/', authenticate, getUsers);
 router.get('/payments', authenticate, getPayments);
 router.post('/', authenticate, createUser);
 router.delete('/:id', authenticate, deleteUser);
+router.patch('/:id/revoke', authenticate, revokeUser);
 router.put('/:id', authenticate, updateUser);
 
 export default router;

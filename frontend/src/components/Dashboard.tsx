@@ -5,7 +5,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ users }: DashboardProps) {
-  const totalRevenue = users.reduce((sum, user) => sum + parseFloat(user.amountPaid.toString()), 0);
+  const totalRevenue = users.reduce((sum, user) => sum + parseFloat((user.amountPaid ?? 0).toString()), 0);
   const activeUsers = users.length;
   const expiringSoon = users.filter(
     u => new Date(u.paymentExpiryDate).getTime() < Date.now() + 3 * 24 * 60 * 60 * 1000

@@ -1,10 +1,9 @@
-import axios from 'axios';
+import axios from "axios";
+import type { ReactNode } from "react";
 
 const isDev = import.meta.env.DEV;
 
-const API_URL = isDev 
-  ? `/api` 
-  : `https://wifisystem.onrender.com/api`;
+const API_URL = isDev ? `/api` : `https://wifisystem.onrender.com/api`;
 
 const api = axios.create({
   baseURL: API_URL,
@@ -13,7 +12,7 @@ const api = axios.create({
 // Add a request interceptor to include the JWT token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -29,21 +28,22 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.location.href = "/login";
     }
     return Promise.reject(error);
   }
 );
 
 export interface WifiUser {
+  methodPaid: ReactNode;
   _id: string;
   name: string;
   macAddress: string;
   paymentExpiryDate: string;
-  amountPaid: number;
-  status: 'active' | 'expired';
+  amountPaid: number | null;
+  status: "active" | "expired";
   createdAt: string;
   routerSync?: {
     success: boolean;
@@ -54,7 +54,7 @@ export interface WifiUser {
 export interface Payment {
   _id: string;
   amount: number;
-  method: string;
+  method: string | null;
   wifiUserId: string;
   wifiUserName: string;
   adminId: string;
@@ -62,17 +62,22 @@ export interface Payment {
 }
 
 export const fetchPayments = async (): Promise<Payment[]> => {
-  const response = await api.get('/users/payments');
+  const response = await api.get("/users/payments");
   return response.data;
 };
 
 export const fetchUsers = async (): Promise<WifiUser[]> => {
-  const response = await api.get('/users');
+  const response = await api.get("/users");
   return response.data;
 };
 
 export const createUser = async (userData: any): Promise<WifiUser> => {
-  const response = await api.post('/users', userData);
+  const response = await api.post("/users", userData);
+  return response.data;
+};
+
+export const revokeUser = async (id: string): Promise<WifiUser> => {
+  const response = await api.patch(`/users/${id}/revoke`);
   return response.data;
 };
 
@@ -80,35 +85,38 @@ export const deleteUser = async (id: string): Promise<void> => {
   await api.delete(`/users/${id}`);
 };
 
-export const updateUser = async (id: string, userData: any): Promise<WifiUser> => {
+export const updateUser = async (
+  id: string,
+  userData: any
+): Promise<WifiUser> => {
   const response = await api.put(`/users/${id}`, userData);
   return response.data;
 };
 
 // Auth APIs
 export const loginUser = async (credentials: any) => {
-  const response = await api.post('/auth/login', credentials);
+  const response = await api.post("/auth/login", credentials);
   return response.data;
 };
 
 export const registerUser = async (userData: any) => {
-  const response = await api.post('/auth/register', userData);
+  const response = await api.post("/auth/register", userData);
   return response.data;
 };
 
 export const updateRouterSettings = async (settings: any) => {
-  const response = await api.put('/auth/me/router', settings);
+  const response = await api.put("/auth/me/router", settings);
   return response.data;
 };
 
 // Router APIs
 export const fetchRouterStatus = async () => {
-  const response = await api.get('/router/status');
+  const response = await api.get("/router/status");
   return response.data;
 };
 
 export const fetchConnectedDevices = async () => {
-  const response = await api.get('/router/devices');
+  const response = await api.get("/router/devices");
   return response.data;
 };
 

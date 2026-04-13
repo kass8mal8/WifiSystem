@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { WifiUser } from '../api';
-import { Users, Trash2, RefreshCw, UserPlus, Search, Filter } from 'lucide-react';
+import { Users, RefreshCw, UserPlus, Search, Filter, ShieldOff } from 'lucide-react';
 import RenewalModal from '../components/RenewalModal';
 import AddUserModal from '../components/AddUserModal';
 import Skeleton from '../components/Skeleton';
@@ -8,12 +8,12 @@ import Skeleton from '../components/Skeleton';
 interface UsersPageProps {
   users: WifiUser[];
   loading?: boolean;
-  onDelete: (id: string) => void;
+  onRevoke: (id: string) => void;
   onUpdate: (id: string, user: Partial<WifiUser>) => Promise<void>;
   onUserAdded: (user: WifiUser) => void;
 }
 
-export default function UsersPage({ users, loading, onDelete, onUpdate, onUserAdded }: UsersPageProps) {
+export default function UsersPage({ users, loading, onRevoke, onUpdate, onUserAdded }: UsersPageProps) {
   const [selectedUser, setSelectedUser] = useState<WifiUser | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -145,16 +145,17 @@ export default function UsersPage({ users, loading, onDelete, onUpdate, onUserAd
                         <p className="text-[var(--text-2)]">{expiry.toLocaleDateString()}</p>
                         <p className="text-[11px] text-[var(--text-3)] mt-0.5">{expiry.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                       </td>
-                      <td className="px-6 py-4 font-black text-[var(--text-1)]">Ksh {parseFloat(user.amountPaid.toString()).toFixed(0)}</td>
+Ksh {parseFloat((user.amountPaid ?? 0).toString()).toFixed(0)}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2.5">
                           <button onClick={() => setSelectedUser(user)}
                             className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-500 hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
                             <RefreshCw size={14}/>
                           </button>
-                          <button onClick={() => user._id && onDelete(user._id)}
-                            className="p-2.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-600 hover:text-white transition-all shadow-sm">
-                            <Trash2 size={14}/>
+                          <button onClick={() => user._id && onRevoke(user._id)}
+                            className="p-2.5 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+                            title="Revoke Access">
+                            <ShieldOff size={14}/>
                           </button>
                         </div>
                       </td>

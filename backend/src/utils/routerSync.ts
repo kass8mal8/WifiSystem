@@ -40,6 +40,20 @@ function isValidMacAddress(mac: string): boolean {
   return /^[0-9a-fA-F]{12}$/.test(normalized);
 }
 
+/** Colon-separated uppercase MAC for router UI consistency and reliable matching. */
+function formatMacForRouter(mac: string): string {
+  const hex = mac.replace(/[:\-\s]/g, '').toLowerCase();
+  if (!/^[0-9a-f]{12}$/.test(hex)) return mac.trim();
+  return hex.match(/.{2}/g)!.map((b) => b.toUpperCase()).join(':');
+}
+
+function isRuleEnabled(rule: any): boolean {
+  const v = rule?.enableRule;
+  if (v === true || v === 1 || v === '1') return true;
+  if (v === false || v === 0 || v === '0') return false;
+  return Boolean(v);
+}
+
 async function routerPost(routerUrl: string, body: any, sessionId: string = ''): Promise<any> {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json; charset=UTF-8',
@@ -55,7 +69,8 @@ async function routerPost(routerUrl: string, body: any, sessionId: string = ''):
     const finalBody = {
         ...body,
         method: body.method || 'GET',
-        sessionId: body.sessionId || sessionId || '',
+        sessionId: sessionId || body.sessionId || '',
+        token: body.token || '',
         language: body.language || 'EN'
     };
 
@@ -83,7 +98,7 @@ async function routerPost(routerUrl: string, body: any, sessionId: string = ''):
  * Utility to synchronize user status with the Airtel 5G Router's MAC filtering rules.
  */
 export class RouterSync {
-  private static sessions = new Map<string, { sessionId: string; variantIndex: number | null }>();
+  private static sessions = new Map<string, { sessionId: string; token?: string; variantIndex: number | null; lastUsed: number }>();
   private static loginPromises = new Map<string, Promise<string>>();
   private static lastLoginAttemptTimes = new Map<string, number>();
 
@@ -110,8 +125,7 @@ export class RouterSync {
 
         this.lastLoginAttemptTimes.set(key, Date.now());
         const sid = await this.login(config);
-        const currentSession = this.sessions.get(key) || { sessionId: '', variantIndex: null };
-        this.sessions.set(key, { ...currentSession, sessionId: sid });
+        // Token and sessionId are set inside login() now
         return sid;
       } finally {
         this.loginPromises.delete(key);
@@ -145,12 +159,17 @@ export class RouterSync {
 
     for (const idx of sortedIndices) {
       const variant = variants[idx];
-      const sessionId = await this.tryVariant(config.routerUrl, variant);
+      const result = await this.tryVariant(config.routerUrl, variant);
       
-      if (sessionId) {
+      if (result) {
         console.log(`[RouterSync] Successfully logged in to ${config.routerUrl} using "${variant.name}"`);
-        this.sessions.set(config.routerUrl, { sessionId, variantIndex: idx });
-        return sessionId;
+        this.sessions.set(config.routerUrl, { 
+          sessionId: result.sessionId, 
+          token: result.token,
+          variantIndex: idx,
+          lastUsed: Date.now()
+        });
+        return result.sessionId;
       }
     }
 
@@ -192,7 +211,7 @@ export class RouterSync {
     return variants;
   }
 
-  private static async tryVariant(routerUrl: string, variant: { name: string; body: any }) {
+  private static async tryVariant(routerUrl: string, variant: { name: string; body: any }): Promise<{ sessionId: string; token: string } | null> {
     const loginSessionId = generateSessionId();
     const bodyWithSession = { ...variant.body, sessionId: loginSessionId };
     
@@ -202,7 +221,10 @@ export class RouterSync {
         if (data.login_fail === 'fail' || data.login_fail2 === 'fail') {
           return null;
         }
-        return data.sessionId || loginSessionId;
+        return {
+          sessionId: data.sessionId || loginSessionId,
+          token: data.token || ''
+        };
       }
     } catch (e) {
       console.error(`[RouterSync] Variant attempt error for ${routerUrl}:`, e);
@@ -220,14 +242,60 @@ export class RouterSync {
     throw new Error(`No session token from router at ${routerUrl}`);
   }
 
-  private static async getMacRules(routerUrl: string, sessionId: string): Promise<any> {
-    const filtersData = await routerPost(routerUrl, { cmd: 23 }, sessionId);
-    return filtersData || { isEnable: "1", filterPolite: "0", datas: [] };
+  private static async getMacRules(config: RouterConfig): Promise<any> {
+    let filtersData = await this.getRouterData(config, 23, { getfun: true });
+    
+    if (filtersData?.success === false) {
+      filtersData = await this.getRouterData(config, 23);
+    }
+    
+    if (filtersData?.success === false) {
+      throw new Error(`[RouterSync] Failed to read MAC filter rules: ${JSON.stringify(filtersData)}`);
+    }
+    const data = filtersData || { isEnable: '1', filterPolite: '0', datas: [] };
+    if (!Array.isArray(data.datas)) {
+      data.datas = [];
+    }
+    return data;
   }
 
-  private static async saveMacRules(routerUrl: string, sessionId: string, filtersData: any): Promise<void> {
-    await routerPost(routerUrl, { cmd: 23, method: 'POST', ...filtersData }, sessionId);
-    await routerPost(routerUrl, { cmd: 20 }, sessionId);
+  /**
+   * Build POST body for cmd:23 without letting GET response fields (e.g. method: "GET")
+   * overwrite cmd/method — that bug prevented saves from applying on the router.
+   */
+  private static buildMacFilterSavePayload(filtersData: any, rules: any[], token?: string): Record<string, any> {
+    const skip = new Set(['cmd', 'method', 'success', 'message', 'raw', 'datas', 'sessionId', 'token']);
+    const rest: Record<string, any> = {};
+    for (const [k, v] of Object.entries(filtersData || {})) {
+      if (skip.has(k)) continue;
+      rest[k] = v;
+    }
+    return {
+      ...rest,
+      cmd: 23,
+      method: 'POST',
+      token: token || filtersData?.token || '',
+      success: true,
+      datas: rules,
+    };
+  }
+
+  private static async saveMacRules(config: RouterConfig, filtersData: any, rules: any[]): Promise<void> {
+    const session = this.sessions.get(config.routerUrl);
+    const payload = this.buildMacFilterSavePayload(filtersData, rules, session?.token);
+    
+    // Use getRouterData to ensure we handle tokens and retries correctly for the POST
+    const saveRes = await this.getRouterData(config, 23, payload);
+    
+    if (saveRes?.success === false) {
+      throw new Error(`[RouterSync] MAC filter save rejected: ${JSON.stringify(saveRes)}`);
+    }
+    
+    // Apply changes
+    const applyRes = await this.getRouterData(config, 20);
+    if (applyRes?.success === false) {
+      console.warn(`[RouterSync] Apply (cmd:20) response: ${JSON.stringify(applyRes)}`);
+    }
   }
 
   static async toggleMacRule(config: RouterConfig, macAddress: string, userName: string, enable: boolean): Promise<void> {
@@ -235,57 +303,126 @@ export class RouterSync {
       throw new Error(`Invalid MAC address: ${macAddress}`);
     }
 
-    const sessionId = await this.ensureLoggedIn(config);
-    const filtersData = await this.getMacRules(config.routerUrl, sessionId);
-    let rules = filtersData.datas || [];
+    const macRouter = formatMacForRouter(macAddress);
 
-    const normalizedTarget = macAddress.replace(/[:\-\s]/g, '').toLowerCase();
-    const ruleIndex = rules.findIndex(
-      (r: any) => r.mac.replace(/[:\-\s]/g, '').toLowerCase() === normalizedTarget
-    );
+    const runOnce = async () => {
+      // We no longer manually fetch sessionId here; getRouterData handles it
+      const filtersData = await this.getMacRules(config);
+      const rules = [...(filtersData.datas || [])];
 
-    if (ruleIndex === -1) {
-      if (!enable) return;
-      rules.push({ remark: userName, mac: macAddress, enableRule: 1, enableLink: 1 });
-    } else {
-      if (rules[ruleIndex].enableRule == (enable ? 1 : 0)) return;
-      rules[ruleIndex].enableRule = enable ? 1 : 0;
+      const normalizedTarget = macRouter.replace(/[:\-\s]/g, '').toLowerCase();
+      const ruleIndex = rules.findIndex(
+        (r: any) => String(r.mac || '').replace(/[:\-\s]/g, '').toLowerCase() === normalizedTarget
+      );
+
+      if (ruleIndex === -1) {
+        if (!enable) {
+          console.warn(
+            `[RouterSync] MAC ${macRouter} not in router MAC filter list; nothing to disable.`
+          );
+          return;
+        }
+        console.log(`[RouterSync] Adding NEW MAC rule for ${userName} (${macRouter})`);
+        rules.push({
+          remark: userName,
+          mac: macRouter,
+          enableRule: 1,
+          enableLink: 1,
+        });
+      } else {
+        const row = rules[ruleIndex];
+        if (isRuleEnabled(row) === enable) {
+          console.log(`[RouterSync] MAC ${macRouter} already ${enable ? 'enabled' : 'disabled'} on router.`);
+          // Even if enabled, let's update the remark if it's missing or different
+          if (row.remark === userName) return;
+        }
+        
+        console.log(`[RouterSync] UPDATING MAC rule for ${userName} (${macRouter}) -> ${enable ? 'ENABLE' : 'DISABLE'}`);
+        rules[ruleIndex] = {
+          ...row,
+          remark: userName || row.remark,
+          mac: formatMacForRouter(String(row.mac || macRouter)),
+          enableRule: enable ? 1 : 0,
+          enableLink: enable ? 1 : 0,
+        };
+      }
+
+      if (!filtersData.hasOwnProperty('isEnable')) filtersData.isEnable = '1';
+      if (!filtersData.hasOwnProperty('filterPolite')) filtersData.filterPolite = '0';
+
+      await this.saveMacRules(config, filtersData, rules);
+    };
+
+    try {
+      await runOnce();
+    } catch (e: any) {
+      console.error(`[RouterSync] Error in toggleMacRule (Attempt 1): ${e.message}`);
+      this.sessions.delete(config.routerUrl);
+      try {
+        await runOnce();
+      } catch (e2: any) {
+        console.error(`[RouterSync] Error in toggleMacRule (Attempt 2 - Final): ${e2.message}`);
+        throw e2;
+      }
     }
-
-    filtersData.datas = rules;
-    
-    // ensure basic keys exist if it was empty from the router
-    if (!filtersData.hasOwnProperty('isEnable')) filtersData.isEnable = "1";
-    if (!filtersData.hasOwnProperty('filterPolite')) filtersData.filterPolite = "0";
-
-    await this.saveMacRules(config.routerUrl, sessionId, filtersData);
   }
 
-  public static async getRouterData(config: RouterConfig, cmd: number, sessionId?: string): Promise<any> {
+  public static async getRouterData(config: RouterConfig, cmd: number, extraBody: any = {}, sessionId?: string): Promise<any> {
     const sId = sessionId || await this.ensureLoggedIn(config);
+    const session = this.sessions.get(config.routerUrl);
+    
     try {
-        const data = await routerPost(config.routerUrl, { cmd }, sId);
+        const body = { 
+            ...extraBody,
+            cmd, 
+            token: session?.token || extraBody.token || '',
+            sessionId: sId
+        };
+        
+        // Ensure method is POST for write commands, otherwise GET
+        if (!body.method) {
+            body.method = (cmd === 23 && !extraBody.getfun) || cmd === 20 || cmd === 100 ? 'POST' : 'GET';
+        }
+
+        const data = await routerPost(config.routerUrl, body, sId);
         
         // Comprehensive check for session expiration or unauthorized access
-        const isExpired = data && (
+        const isAuthError = data && (
+            data.message === 'NO_AUTH' ||
             data.error_code === 104 || 
             data.error === 104 || 
-            data.error === 101 || 
-            data.success === false
+            data.error === 101
         );
 
-        if (isExpired) {
-            console.warn(`[RouterSync] Session expired or invalid for ${config.routerUrl} (Cmd: ${cmd}). Re-authenticating...`);
+        if (isAuthError) {
+            console.warn(`[RouterSync] Session expired for ${config.routerUrl} (Cmd: ${cmd}). Response: ${JSON.stringify(data)}`);
             this.sessions.delete(config.routerUrl);
             // Only retry if we haven't already passed an explicit sessionId
             if (!sessionId) {
                 const newSId = await this.ensureLoggedIn(config);
-                return await routerPost(config.routerUrl, { cmd }, newSId);
+                const freshSession = this.sessions.get(config.routerUrl);
+                
+                const retryBody = { 
+                    ...body, 
+                    token: freshSession?.token || '',
+                    sessionId: newSId
+                };
+                return await routerPost(config.routerUrl, retryBody, newSId);
             }
         }
+        
+        // Update token if returned in response
+        if (data?.token && session) {
+            session.token = data.token;
+            session.lastUsed = Date.now();
+        }
+
         return data;
-    } catch (e) {
-        this.sessions.delete(config.routerUrl);
+    } catch (e: any) {
+        // If it's a network error, clear session to be safe on next try
+        if (e.message?.includes('fetch') || e.message?.includes('ECONN')) {
+          this.sessions.delete(config.routerUrl);
+        }
         throw e;
     }
   }

@@ -46,8 +46,8 @@ export default function UserList({ users, onDelete }: UserListProps) {
                     <td className="px-6 py-4 hidden sm:table-cell text-slate-300">
                       {new Date(user.paymentExpiryDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                     </td>
-                    <td className="px-6 py-4 text-emerald-400 font-medium">${parseFloat(user.amountPaid.toString()).toFixed(2)}</td>
-                    <td className="px-6 py-4 hidden lg:table-cell">{user.methodPaid}</td>
+            ${parseFloat((user.amountPaid ?? 0).toString()).toFixed(2)}
+                    <td className="px-6 py-4 hidden lg:table-cell">{user?.methodPaid}</td>
                     <td className="px-6 py-4 text-right">
                       <button onClick={() => user._id && onDelete(user._id)} className="text-slate-400 hover:text-rose-400 transition-colors p-1" title="Revoke Access">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
